@@ -40,6 +40,10 @@ def _at(s: dict) -> dict:
 
 # ── Embedding engine ──────────────────────────────────────────────────────────
 
+_model_lock   = threading.Lock()
+_shared_model = None
+
+
 class EmbeddingEngine:
     """
     Lazy-loading wrapper around sentence-transformers.
@@ -54,9 +58,15 @@ class EmbeddingEngine:
         self._build_lock = threading.Lock()
 
     def _try_load_model(self):
+        global _shared_model
         try:
             from sentence_transformers import SentenceTransformer
-            self._model   = SentenceTransformer("all-MiniLM-L6-v2")
+            # Loading the model from two threads at once fails ("Cannot copy out
+            # of meta tensor"), so load it once per process and share it.
+            with _model_lock:
+                if _shared_model is None:
+                    _shared_model = SentenceTransformer("all-MiniLM-L6-v2")
+            self._model   = _shared_model
             self.semantic = True
             log.info("Recommendation engine: semantic mode (sentence-transformers)")
         except ImportError:
@@ -607,7 +617,7 @@ class RecommendationEngine:
                 continue
 
             pos_score = self.engine.score_against_vec(sid, taste_vec)
-            neg_score = self.engine.score_against_vec(sid, dislike_vec) if dislike_vec else 0
+            neg_score = self.engine.score_against_vec(sid, dislike_vec) if dislike_vec is not None else 0
             tag_score = self._tag_boost(s, tag_profile)
             # 70% semantic similarity + 30% tag match, penalise dislike-similar
             final = 0.7 * pos_score + 0.3 * tag_score - 0.3 * neg_score
