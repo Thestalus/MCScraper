@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1rem;">
+  <h1 class="page-title" style="margin:0;border:none;">&#9679; New Stories</h1>
+  <span style="font-size:0.82rem; color:var(--muted);">
+    {{ new_stories|length }} stories/updates
+    {% if last_run %}&middot; Last update: {{ last_run }}{% endif %}
+  </span>
+</div>
+{% if update_runs %}
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+            padding:0.75rem 1rem; margin-bottom:1.5rem; font-size:0.82rem;">
+  <span style="color:var(--muted); margin-right:1rem;">Recent updates:</span>
+  {% for run in update_runs|reverse %}
+  <span style="margin-right:1.5rem;">
+    {{ run.timestamp[:10] }}
+    <span style="color:var(--accent2);">+{{ run.stories_added_to_index or run.get("stories_added", 0) }}</span>
+    {% if run.get("chapters_updated") %}<span style="color:var(--muted);">&nbsp;+{{ run.chapters_updated }}ch</span>{% endif %}
+  </span>
+  {% endfor %}
+</div>
+{% endif %}
+{% if not new_stories %}
+<p style="color:var(--muted);">
+  Run <code>make update</code> to check for new stories.
+</p>
+{% else %}
+<div class="story-grid">
+{% for s, badge in new_stories %}
+{% set at = story_tags(s) %}
+{% set cats = s.categories %}
+{% set is_liked_story  = prefs and prefs.story_status(s.id) == 'liked' %}
+{% set is_liked_author = prefs and s.author in prefs.liked_authors %}
+{% set is_fave = ('md' in cats or 'mc' in cats) and 'mf' in cats %}
+{% set visit = prefs.visit_info(s.id) if prefs else none %}
+{% if is_fave and is_liked_author %}{% set card_class = "pref-fave pref-author-fave" %}
+{% elif is_fave %}{% set card_class = "pref-fave" %}
+{% elif is_liked_author %}{% set card_class = "pref-author" %}
+{% elif is_liked_story %}{% set card_class = "pref-liked" %}
+{% else %}{% set card_class = "" %}{% endif %}
+<div class="story-card {{ card_class }}">
+  <div class="story-title">
+    <a href="/story/{{ s.id }}">{{ s | dt }}</a>
+    {% if badge %}<span class="pref-badge" style="background:#1a3a1a; color:#7ecb7e; border:1px solid #2e5a2e;">{{ badge }}</span>{% endif %}
+    {% if is_fave and is_liked_author %}<span class="pref-badge badge-fave">&#9733; fave &middot; liked author</span>
+    {% elif is_fave %}<span class="pref-badge badge-fave">&#9733; fave type</span>
+    {% elif is_liked_author %}<span class="pref-badge badge-author">&#9733; liked author</span>
+    {% elif is_liked_story %}<span class="pref-badge badge-liked">&#9829; liked</span>
+    {% endif %}
+    {% if visit %}
+      {% if visit.total > 1 %}
+      <span class="pref-badge badge-history">&#9654; Ch {{ visit.last_chapter }}/{{ visit.total }}</span>
+      {% else %}
+      <span class="pref-badge badge-history">&#9654; read</span>
+      {% endif %}
+    {% endif %}
+    {% if s.source == "wayback" %}<span class="pref-badge" style="background:#2a3a4a;color:#8ab4d4;border:1px solid #4a7a9a;">&#8984; archived</span>{% endif %}
+    {% if prefs and prefs.is_wanted(s.id) %}<span class="pref-badge badge-wtr">&#128278; want to read</span>{% endif %}
+  </div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author or "Unknown" }}</a></span>
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} chapters</span>{% endif %}
+    {% if s.added_date %}<span>{{ s.added_date }}</span>{% endif %}
+    {% if at.get("length_class") %}<span class="mono">{{ at.length_class }}</span>{% endif %}
+    {% if at.get("pov") %}<span class="mono">{{ at.pov }}</span>{% endif %}
+  </div>
+  <div>
+    {% for cat in cats[:6] %}
+    <a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>
+    {% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}
+    <span class="tag mc-type">{{ mc }}</span>
+    {% endfor %}
+    {% for d in visible_tags(at.get("dominance") or [], at)[:1] %}
+    <span class="tag" style="color:#c8a06a">{{ d }}</span>
+    {% endfor %}
+    {% for p in visible_tags(at.get("pacing") or [], at)[:1] %}
+    <span class="tag" style="color:#7a9e7a">{{ p }}</span>
+    {% endfor %}
+    {% for a in visible_tags(at.get("awareness") or [], at)[:1] %}
+    <span class="tag" style="color:#8a9abf">{{ a }}</span>
+    {% endfor %}
+  </div>
+  {% if s.description %}
+  <div class="story-desc">{{ s.description }}</div>
+  {% endif %}
+  <div style="margin-top:0.4rem; display:flex; align-items:center; flex-wrap:wrap; gap:0.25rem;">
+    {% if prefs %}
+    {% set status = prefs.story_status(s.id) %}
+    <button onclick="cardLike(this,'{{ s.id }}','liked')"
+            style="background:{{ '#e8f4e8' if status=='liked' else 'transparent' }};
+                   border:1px solid {{ '#4a8a4a' if status=='liked' else 'var(--border)' }};
+                   color:{{ '#2a5a2a' if status=='liked' else 'var(--muted)' }};
+                   padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                   font-size:0.75rem; font-family:inherit;">
+      {{ ("&#9829;" if status=='liked' else "&#9825;") | safe }} Like
+    </button>
+    {% if status == 'liked' %}
+    <button onclick="cardLike(this,'{{ s.id }}','none')"
+            style="background:transparent; border:1px solid var(--border);
+                   color:var(--muted); padding:0.15rem 0.6rem; border-radius:3px;
+                   cursor:pointer; font-size:0.75rem; font-family:inherit;">
+      &#10005; Unlike
+    </button>
+    {% endif %}
+    {% endif %}
+    {% if prefs %}
+    <button class="want-btn" data-wanted="{{ '1' if prefs.is_wanted(s.id) else '0' }}"
+            onclick="cardWant(this,'{{ s.id }}')"
+            style="background:{{ '#e8f4e8' if prefs.is_wanted(s.id) else 'transparent' }};
+                   border:1px solid {{ '#4a7a4a' if prefs.is_wanted(s.id) else 'var(--border)' }};
+                   color:{{ '#2a5a2a' if prefs.is_wanted(s.id) else 'var(--muted)' }};
+                   padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                   font-size:0.75rem; font-family:inherit;">
+      &#128278; {{ "Wanted" if prefs.is_wanted(s.id) else "Want" }}
+    </button>
+    {% endif %}
+    <button class="preview-btn" onclick="togglePreview(this,'{{ s.id }}')">&#9656; Preview</button>
+  </div>
+  <div class="preview-box" id="preview-{{ s.id }}"></div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+<script>
+function cardLike(btn, id, status) {
+  fetch('/api/like/' + id, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status: status})})
+  .then(r => r.json()).then(d => {
+    if (d.ok) {
+      if (status === 'liked') {
+        btn.innerHTML = '&#9829; Like'; btn.style.background = '#e8f4e8';
+        btn.style.borderColor = '#4a8a4a'; btn.style.color = '#2a5a2a';
+      } else {
+        btn.innerHTML = '&#9825; Like'; btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--muted)';
+      }
+    }
+  });
+}
+var _previewCache = {};
+function togglePreview(btn, id) {
+  var box = document.getElementById('preview-' + id);
+  if (box.classList.contains('open')) {
+    box.classList.remove('open'); btn.innerHTML = '&#9656; Preview'; return;
+  }
+  btn.innerHTML = '&#9660; Preview'; box.classList.add('open');
+  if (_previewCache[id]) { box.textContent = _previewCache[id]; return; }
+  box.textContent = 'Loading\u2026';
+  fetch('/api/preview/' + id).then(r => r.json())
+    .then(d => { _previewCache[id] = d.text || ''; box.textContent = _previewCache[id]; })
+    .catch(() => { box.textContent = 'Preview unavailable.'; });
+}
+</script>
+{% endblock %}

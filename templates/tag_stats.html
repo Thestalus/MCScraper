@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Tag Coverage Dashboard</h1>
+<p style="color:var(--muted); font-size:0.88rem; margin-bottom:1.5rem;">
+  Auto-tag coverage across {{ stats.total | default(0) | int }} stories with text.
+  Coverage = % of stories that have at least one tag in the dimension.
+</p>
+{% for dim in stats.dimensions %}
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+            padding:1.1rem 1.25rem; margin-bottom:1rem;">
+  <div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:0.6rem;">
+    <span style="font-weight:600; font-size:1rem;">{{ dim.label }}</span>
+    <span style="font-size:0.82rem; color:var(--muted);">{{ dim.covered | int }} / {{ stats.total | int }} stories</span>
+    <span style="font-size:0.82rem; font-family:monospace;
+                 color:{{ "#4a8a4a" if dim.pct >= 70 else ("#a07030" if dim.pct >= 40 else "#8b2a2a") }};">
+      {{ dim.pct }}%
+    </span>
+    <div style="flex:1; background:var(--bg3); border-radius:3px; height:6px; max-width:200px; overflow:hidden;">
+      <div style="width:{{ [dim.pct, 100] | min }}%; height:100%;
+                  background:{{ "#4a8a4a" if dim.pct >= 70 else ("#c09040" if dim.pct >= 40 else "#9a3a3a") }};
+                  border-radius:3px;"></div>
+    </div>
+    <span style="font-size:0.78rem; color:var(--muted);">{{ dim.tag_count }} unique values</span>
+  </div>
+  {% if dim.top %}
+  <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
+    {% for val, cnt in dim.top %}
+    <span class="tag" style="font-size:0.75rem; cursor:default;" title="{{ cnt }} stories">
+      {{ val }} <span style="opacity:0.6; font-size:0.7rem;">({{ cnt }})</span>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

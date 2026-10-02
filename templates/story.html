@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1060px">
+  <div class="reader-header">
+    <div class="reader-title">{{ story | dt }}</div>
+    <div class="reader-meta">
+      by <a href="/author/{{ story.author | urlencode }}">{{ story.author }}</a>
+      {% if story.word_count %} &middot; {{ "{:,}".format(story.word_count) }} words{% endif %}
+      {% if story.added_date %} &middot; Added {{ story.added_date }}{% endif %}
+      {% if (story.chapter_count | default(0)) > 1 %} &middot; {{ story.chapter_count }} chapters{% endif %}
+    </div>
+    <div class="reader-tags" style="margin-top:0.6rem">
+      {% for cat in story.categories %}
+      <a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>
+      {% endfor %}
+      {% set at = story_tags(story) %}
+      {% for mc in visible_tags(at.get("mind_control_type", []), at) %}
+      <span class="tag mc-type">{{ mc }}</span>
+      {% endfor %}
+      {% for s in at.get("setting", []) %}
+      <span class="tag" style="color:#8ab4c8">{{ s }}</span>
+      {% endfor %}
+      {% for t in visible_tags(at.get("themes", []), at) %}
+      <span class="tag" style="color:#a0c898">{{ t }}</span>
+      {% endfor %}
+      {% if at.get("tone") %}<span class="tag">{{ at.tone[0] }}</span>{% endif %}
+      {% if at.get("pov") %}<span class="tag mono">{{ at.pov }}</span>{% endif %}
+      {% if at.get("length_class") %}<span class="tag mono">{{ at.length_class }}</span>{% endif %}
+      {% for x in visible_tags(at.get("sexual_acts", []), at) %}
+      <span class="tag" style="color:#b87070">{{ x }}</span>
+      {% endfor %}
+      {% for x in at.get("fetish", []) %}
+      <span class="tag" style="color:#9070b8">{{ x }}</span>
+      {% endfor %}
+      {% for x in visible_tags(at.get("relationship", []), at) %}
+      <span class="tag" style="color:#70a0b8">{{ x }}</span>
+      {% endfor %}
+    </div>
+    {% if story.description %}
+    <p style="margin-top:0.75rem; font-style:italic; color:#a89880; font-size:0.95rem">
+      {{ story.description }}</p>
+    {% endif %}
+    <div style="margin-top:0.75rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+      <a href="{{ story.story_url }}" target="_blank"
+         style="font-size:0.82rem; color:var(--muted);">&#8599; View on mcstories.com</a>
+      <span style="display:flex; gap:0.25rem; align-items:center;">
+        <button onclick="adjFont(-1)" title="Smaller text"
+                style="background:none;border:1px solid var(--border);color:var(--muted);
+                       padding:0.1rem 0.55rem;border-radius:3px;cursor:pointer;
+                       font-size:0.85rem;font-family:inherit;">A&minus;</button>
+        <button onclick="adjFont(1)"  title="Larger text"
+                style="background:none;border:1px solid var(--border);color:var(--muted);
+                       padding:0.1rem 0.55rem;border-radius:3px;cursor:pointer;
+                       font-size:1.05rem;font-family:inherit;">A+</button>
+      </span>
+      <span style="display:flex; gap:0.5rem; align-items:center;">
+        <button onclick="setLike('liked')"
+                style="background:{{ '#e8f4e8' if story_status=='liked' else 'var(--bg2)' }};
+                       border:1px solid {{ '#4a8a4a' if story_status=='liked' else 'var(--border)' }};
+                       color:{{ '#2a5a2a' if story_status=='liked' else 'var(--muted)' }};
+                       padding:0.3rem 0.8rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.88rem;">
+          &#9829; {{ "Liked" if story_status=="liked" else "Like" }}
+        </button>
+        <button onclick="setLike('disliked')"
+                style="background:{{ '#f4e8e8' if story_status=='disliked' else 'var(--bg2)' }};
+                       border:1px solid {{ '#8a4a4a' if story_status=='disliked' else 'var(--border)' }};
+                       color:{{ '#5a2a2a' if story_status=='disliked' else 'var(--muted)' }};
+                       padding:0.3rem 0.8rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.88rem;">
+          &#128078; Not for me
+        </button>
+        {% if story_status != 'none' %}
+        <button onclick="setLike('none')"
+                style="background:none; border:none; color:var(--muted); cursor:pointer;
+                       font-size:0.82rem; font-family:inherit;">&#10005; Clear</button>
+        {% endif %}
+      </span>
+      {% if prefs %}
+      <span style="display:flex; gap:0.5rem; align-items:center;">
+        <button id="want-btn" data-wanted="{{ '1' if prefs.is_wanted(story.id) else '0' }}"
+                onclick="setWant()"
+                style="background:{{ '#e8f4e8' if prefs.is_wanted(story.id) else 'var(--bg2)' }};
+                       border:1px solid {{ '#4a7a4a' if prefs.is_wanted(story.id) else 'var(--border)' }};
+                       color:{{ '#2a5a2a' if prefs.is_wanted(story.id) else 'var(--muted)' }};
+                       padding:0.3rem 0.8rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.88rem;">
+          &#128278; {{ "Wanted" if prefs.is_wanted(story.id) else "Want to read" }}
+        </button>
+      </span>
+      {% endif %}
+    </div>
+    <div style="margin-top:0.5rem; font-size:0.88rem; display:flex; gap:1.5rem;">
+      <a href="/similar/{{ story.id }}">&#8801; Similar stories</a>
+      <a href="/author-similar/{{ story.author | urlencode }}">&#9768; Authors like {{ story.author }}</a>
+    </div>
+  </div>
+
+  <script>
+  function setLike(status) {
+    fetch('/api/like/{{ story.id }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: status})
+    }).then(r => r.json()).then(d => { if (d.ok) location.reload(); });
+  }
+  function setWant() {
+    var btn = document.getElementById('want-btn');
+    var wanted = btn.dataset.wanted === '1';
+    fetch('/api/want/{{ story.id }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({wanted: !wanted})
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        btn.dataset.wanted = d.wanted ? '1' : '0';
+        btn.innerHTML = d.wanted ? '&#128278; Wanted' : '&#128278; Want to read';
+        btn.style.background = d.wanted ? '#e8f4e8' : 'var(--bg2)';
+        btn.style.borderColor = d.wanted ? '#4a7a4a' : 'var(--border)';
+        btn.style.color = d.wanted ? '#2a5a2a' : 'var(--muted)';
+      }
+    });
+  }
+  </script>
+
+  {% if chapters|length > 1 %}
+  <div class="chapter-nav" id="chapter-nav-top">
+    {% for i, label in chapters %}
+    <button class="chapter-btn {{ 'active' if i==current_ch }}"
+            onclick="showChapter({{ i }}, false)">{{ label }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="story-text" id="story-body">
+    {% for i, chunk in chapter_chunks %}
+    <div class="chapter-chunk" id="ch-{{ i }}"
+         style="{{ 'display:none' if i != current_ch }}">
+      {% if chapters|length > 1 %}
+      <div class="chapter-divider">&mdash; Chapter {{ i }} &mdash;</div>
+      {% endif %}
+      {{ chunk | safe }}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if chapters|length > 1 %}
+  <div class="chapter-nav" id="chapter-nav-bottom" style="margin-top:2rem; margin-bottom:1rem;">
+    {% for i, label in chapters %}
+    <button class="chapter-btn {{ 'active' if i==current_ch }}"
+            onclick="showChapter({{ i }}, true)">{{ label }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if similar %}
+<div style="margin-top:3rem; border-top:1px solid var(--border); padding-top:1.5rem;">
+  <div style="font-size:0.78rem; color:var(--muted); letter-spacing:0.1em;
+              text-transform:uppercase; margin-bottom:1rem;">Similar stories</div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:0.75rem;">
+  {% for sim, score in similar %}
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:0.75rem;">
+    <div style="font-size:0.95rem; margin-bottom:0.2rem;">
+      <a href="/story/{{ sim.id }}">{{ sim | dt }}</a>
+    </div>
+    <div style="font-size:0.8rem; color:var(--muted);">
+      {{ sim.author }} &middot; {{ "{:,}".format(sim.word_count) }} words
+    </div>
+    {% set at2 = story_tags(sim) %}
+    <div style="margin-top:0.3rem;">
+      {% for mc in (at2.get("mind_control_type") or [])[:2] %}
+      <span class="tag mc-type" style="font-size:0.72rem;">{{ mc }}</span>
+      {% endfor %}
+      {% for t in (at2.get("themes") or [])[:2] %}
+      <span class="tag" style="font-size:0.72rem; color:#a0c898;">{{ t }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+  <p style="margin-top:0.75rem; font-size:0.82rem;">
+    <a href="/similar/{{ story.id }}">See all similar stories &rarr;</a>
+  </p>
+</div>
+{% endif %}
+
+<script>
+var _currentChapter = {{ current_ch }};
+var _totalChapters  = {{ chapters|length }};
+var _storyId        = "{{ story.id }}";
+
+// ── Font size controls ─────────────────────────────────────────────────────
+var _fontSizes = [0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15, 1.20, 1.30, 1.40, 1.55, 1.70];
+var _fontIdx   = _fontSizes.indexOf(1.15);  // default matches CSS
+(function() {
+  var saved = parseFloat(localStorage.getItem('mc_font_size'));
+  if (saved) {
+    var i = _fontSizes.indexOf(saved);
+    if (i !== -1) _fontIdx = i;
+    document.getElementById('story-body').style.fontSize = _fontSizes[_fontIdx] + 'rem';
+  }
+})();
+function adjFont(dir) {
+  _fontIdx = Math.max(0, Math.min(_fontSizes.length - 1, _fontIdx + dir));
+  var sz = _fontSizes[_fontIdx] + 'rem';
+  document.getElementById('story-body').style.fontSize = sz;
+  localStorage.setItem('mc_font_size', _fontSizes[_fontIdx]);
+}
+
+function showChapter(n, scrollToTop) {
+  document.querySelectorAll(".chapter-chunk").forEach(el => el.style.display = "none");
+  document.getElementById("ch-"+n).style.display = "block";
+  document.querySelectorAll("#chapter-nav-top .chapter-btn").forEach((btn, i) =>
+    btn.classList.toggle("active", i === n-1));
+  document.querySelectorAll("#chapter-nav-bottom .chapter-btn").forEach((btn, i) =>
+    btn.classList.toggle("active", i === n-1));
+  _currentChapter = n;
+  if (scrollToTop) {
+    window.scrollTo(0, document.getElementById("chapter-nav-top").offsetTop - 80);
+  }
+  fetch('/api/history/' + _storyId, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({chapter: n, total: _totalChapters})
+  });
+}
+// Record initial visit on page load
+fetch('/api/history/' + _storyId, {
+  method: 'POST', headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({chapter: _currentChapter, total: _totalChapters})
+});
+
+{% if chapters|length > 1 %}
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    if (_currentChapter < _totalChapters) { e.preventDefault(); showChapter(_currentChapter + 1, true); }
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    if (_currentChapter > 1) { e.preventDefault(); showChapter(_currentChapter - 1, true); }
+  }
+});
+{% endif %}
+</script>
+{% endblock %}

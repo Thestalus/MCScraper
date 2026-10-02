@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="layout">
+  <aside class="sidebar">
+    <form method="get" action="/search">
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+
+      <div class="filter-section">
+        <span class="filter-label">Category Tags</span>
+        <input type="text" name="cat" placeholder="e.g. mc mf hm" value="{{ cat }}">
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Exclude categories</span>
+        <input type="text" name="exclude_cat" placeholder="e.g. nc sn" value="{{ exclude_cat }}">
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">MC Method</span>
+        <select name="mc_type">
+          <option value="">Any</option>
+          {% for t in mc_types %}<option value="{{ t }}" {{ "selected" if mc_type==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Setting</span>
+        <select name="setting">
+          <option value="">Any</option>
+          {% for t in settings %}<option value="{{ t }}" {{ "selected" if setting==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Themes <span style="font-weight:normal; text-transform:none; letter-spacing:0;">(ctrl/cmd+click)</span></span>
+        <select name="theme" multiple size="6" style="height:auto;">
+          {% for t in themes %}<option value="{{ t }}" {{ "selected" if t in selected_themes }}>{{ t }}</option>{% endfor %}
+        </select>
+        <div style="display:flex; gap:0.8rem; margin-top:0.3rem; font-size:0.78rem; color:var(--muted);">
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="theme_logic" value="any" {{ "checked" if theme_logic == "any" }} style="accent-color:var(--accent);"> any
+          </label>
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="theme_logic" value="all" {{ "checked" if theme_logic != "any" }} style="accent-color:var(--accent);"> all
+          </label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Tone</span>
+        <select name="tone">
+          <option value="">Any</option>
+          {% for t in tones %}<option value="{{ t }}" {{ "selected" if tone==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Dominance style</span>
+        <select name="dominance">
+          <option value="">Any</option>
+          {% for t in dominances %}<option value="{{ t }}" {{ "selected" if dominance==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Pacing</span>
+        <select name="pacing">
+          <option value="">Any</option>
+          {% for t in pacings %}<option value="{{ t }}" {{ "selected" if pacing==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Victim awareness</span>
+        <select name="awareness">
+          <option value="">Any</option>
+          {% for t in awareness_opts %}<option value="{{ t }}" {{ "selected" if awareness==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Sexual Acts <span style="font-weight:normal; text-transform:none; letter-spacing:0;">(ctrl/cmd+click)</span></span>
+        <select name="sexual_act" multiple size="5" style="height:auto;">
+          {% for t in sexual_acts %}<option value="{{ t }}" {{ "selected" if t in selected_sexual_acts }}>{{ t }}</option>{% endfor %}
+        </select>
+        <div style="display:flex; gap:0.8rem; margin-top:0.3rem; font-size:0.78rem; color:var(--muted);">
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="sexual_act_logic" value="any" {{ "checked" if sexual_act_logic != "all" }} style="accent-color:var(--accent);"> any
+          </label>
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="sexual_act_logic" value="all" {{ "checked" if sexual_act_logic == "all" }} style="accent-color:var(--accent);"> all
+          </label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Fetish <span style="font-weight:normal; text-transform:none; letter-spacing:0;">(ctrl/cmd+click)</span></span>
+        <select name="fetish_tag" multiple size="5" style="height:auto;">
+          {% for t in fetish_tags %}<option value="{{ t }}" {{ "selected" if t in selected_fetish_tags }}>{{ t }}</option>{% endfor %}
+        </select>
+        <div style="display:flex; gap:0.8rem; margin-top:0.3rem; font-size:0.78rem; color:var(--muted);">
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="fetish_tag_logic" value="any" {{ "checked" if fetish_tag_logic != "all" }} style="accent-color:var(--accent);"> any
+          </label>
+          <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer;">
+            <input type="radio" name="fetish_tag_logic" value="all" {{ "checked" if fetish_tag_logic == "all" }} style="accent-color:var(--accent);"> all
+          </label>
+        </div>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Relationship</span>
+        <select name="relationship">
+          <option value="">Any</option>
+          {% for t in relationships %}<option value="{{ t }}" {{ "selected" if relationship==t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Length</span>
+        <select name="length">
+          <option value="">Any</option>
+          {% for l in lengths %}<option value="{{ l }}" {{ "selected" if length_class==l }}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Added Date</span>
+        <div style="display:flex; gap:0.4rem; align-items:center; font-size:0.82rem; color:var(--muted);">
+          <span>From</span>
+          <input type="month" name="date_from" value="{{ date_from }}"
+                 style="flex:1; background:var(--bg3); border:1px solid var(--border);
+                        color:var(--text); border-radius:3px; padding:0.2rem 0.3rem;
+                        font-size:0.82rem; font-family:inherit; min-width:0;">
+        </div>
+        <div style="display:flex; gap:0.4rem; align-items:center; font-size:0.82rem; color:var(--muted); margin-top:0.3rem;">
+          <span>To&nbsp;&nbsp;</span>
+          <input type="month" name="date_to" value="{{ date_to }}"
+                 style="flex:1; background:var(--bg3); border:1px solid var(--border);
+                        color:var(--text); border-radius:3px; padding:0.2rem 0.3rem;
+                        font-size:0.82rem; font-family:inherit; min-width:0;">
+        </div>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Sort By</span>
+        <select name="sort">
+          <option value="relevance" {{ "selected" if sort=="relevance" or not sort }}>Relevance</option>
+          <option value="title" {{ "selected" if sort=="title" }}>Title A&ndash;Z</option>
+          <option value="author" {{ "selected" if sort=="author" }}>Author A&ndash;Z</option>
+          <option value="words_desc" {{ "selected" if sort=="words_desc" }}>Longest first</option>
+          <option value="words_asc" {{ "selected" if sort=="words_asc" }}>Shortest first</option>
+          <option value="date" {{ "selected" if sort=="date" }}>Newest first</option>
+        </select>
+      </div>
+      <div class="filter-section" style="border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.4rem;">
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:var(--muted); text-transform:none; letter-spacing:0;">
+          <input type="checkbox" name="soft" value="1" {{ "checked" if soft }}
+                 style="accent-color:var(--accent); width:14px; height:14px;">
+          <span><strong style="color:var(--text)">Soft filters</strong> &mdash; rank by match, don't exclude</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:var(--muted); text-transform:none; letter-spacing:0; margin-top:0.4rem;">
+          <input type="checkbox" name="archived" value="1" {{ "checked" if archived }}
+                 style="accent-color:var(--accent); width:14px; height:14px;">
+          <span><strong style="color:var(--text)">Archived only</strong> &mdash; Wayback Machine stories</span>
+        </label>
+        {% if prefs and prefs.total_likes %}
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:var(--muted); text-transform:none; letter-spacing:0; margin-top:0.4rem;">
+          <input type="checkbox" name="liked_filter" value="1" {{ "checked" if liked_filter }}
+                 style="accent-color:var(--accent); width:14px; height:14px;">
+          <span><strong style="color:var(--text)">Liked only</strong> &mdash; stories &amp; liked authors</span>
+        </label>
+        {% endif %}
+      </div>
+      <div class="filter-section" style="border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.4rem;">
+        <span class="filter-label">Search Mode</span>
+        <div style="display:flex; gap:0.8rem; margin-top:0.3rem; font-size:0.85rem;">
+          <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer; text-transform:none; letter-spacing:0; color:var(--text);">
+            <input type="radio" name="search_mode" value="literal" {{ "checked" if search_mode == "literal" }}
+                   style="accent-color:var(--accent);">
+            Literal
+          </label>
+          <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer; text-transform:none; letter-spacing:0; color:var(--text);">
+            <input type="radio" name="search_mode" value="fuzzy" {{ "checked" if search_mode == "fuzzy" }}
+                   style="accent-color:var(--accent);">
+            Closest match
+          </label>
+        </div>
+        <div style="font-size:0.78rem; color:var(--muted); margin-top:0.25rem;">Literal: all words required &middot; Closest: any word, ranked by coverage</div>
+      </div>
+      <button class="filter-btn" type="submit">Apply Filters</button>
+      <a href="/"><button class="clear-btn" type="button">Clear All</button></a>
+    </form>
+  </aside>
+
+  <main>
+    {% if nlq_detected %}
+    <div style="background:#fdf8f0; border:1px solid #d4b896; border-radius:6px;
+                padding:0.6rem 1rem; margin-bottom:1rem; font-size:0.85rem;
+                display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      <span style="color:var(--muted);">&#128269; Detected in query:</span>
+      {% for dim, val in nlq_detected.items() %}
+        {% if dim == "theme" %}
+          {% for v in val %}<span class="tag" style="font-size:0.78rem;">{{ dim }}: {{ v }}</span>{% endfor %}
+        {% else %}
+          <span class="tag" style="font-size:0.78rem;">{{ dim }}: {{ val }}</span>
+        {% endif %}
+      {% endfor %}
+      {% if nlq_url %}
+      <a href="{{ nlq_url }}"
+         style="margin-left:auto; background:var(--accent2); color:#fff;
+                padding:0.2rem 0.7rem; border-radius:4px; text-decoration:none;
+                font-size:0.82rem; white-space:nowrap;">
+        Apply as filters &rarr;
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="results-header">
+      <span>{{ total }} stories{% if q %} matching <em>"{{ q }}"</em>{% endif %}</span>
+      <span>Page {{ page }} of {{ total_pages }}</span>
+    </div>
+
+    <div class="story-grid">
+    {% for s in results %}
+    {% set at = story_tags(s) %}
+    {% set cats = s.categories %}
+    {% set is_liked_story  = prefs and prefs.story_status(s.id) == 'liked' %}
+    {% set is_liked_author = prefs and s.author in prefs.liked_authors %}
+    {% set is_fave = ('md' in cats or 'mc' in cats) and 'mf' in cats %}
+    {% set visit = prefs.visit_info(s.id) if prefs else none %}
+    {% if is_fave and is_liked_author %}{% set card_class = "pref-fave pref-author-fave" %}
+    {% elif is_fave %}{% set card_class = "pref-fave" %}
+    {% elif is_liked_author %}{% set card_class = "pref-author" %}
+    {% elif is_liked_story %}{% set card_class = "pref-liked" %}
+    {% else %}{% set card_class = "" %}{% endif %}
+    <div class="story-card {{ card_class }}">
+      <div class="story-title">
+        <a href="/story/{{ s.id }}">{{ s | dt }}</a>
+        {% if is_fave and is_liked_author %}<span class="pref-badge badge-fave">&#9733; fave &middot; liked author</span>
+        {% elif is_fave %}<span class="pref-badge badge-fave">&#9733; fave type</span>
+        {% elif is_liked_author %}<span class="pref-badge badge-author">&#9733; liked author</span>
+        {% elif is_liked_story %}<span class="pref-badge badge-liked">&#9829; liked</span>
+        {% endif %}
+        {% if visit %}
+          {% if visit.total > 1 %}
+          <span class="pref-badge badge-history">&#9654; Ch {{ visit.last_chapter }}/{{ visit.total }}</span>
+          {% else %}
+          <span class="pref-badge badge-history">&#9654; read</span>
+          {% endif %}
+        {% endif %}
+        {% if s.source == "wayback" %}<span class="pref-badge" style="background:#2a3a4a;color:#8ab4d4;border:1px solid #4a7a9a;">&#8984; archived</span>{% endif %}
+        {% if prefs and prefs.is_wanted(s.id) %}<span class="pref-badge badge-wtr">&#128278; want to read</span>{% endif %}
+      </div>
+      <div class="story-meta">
+        <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author or "Unknown" }}</a></span>
+        <span>{{ "{:,}".format(s.word_count) }} words</span>
+        {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} chapters</span>{% endif %}
+        {% if s.added_date %}<span>{{ s.added_date }}</span>{% endif %}
+        {% if at.get("length_class") %}<span class="mono">{{ at.length_class }}</span>{% endif %}
+        {% if at.get("pov") %}<span class="mono">{{ at.pov }}</span>{% endif %}
+      </div>
+      <div>
+        {% for cat in cats[:6] %}
+        <a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>
+        {% endfor %}
+        {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}
+        <span class="tag mc-type">{{ mc }}</span>
+        {% endfor %}
+        {% for d in visible_tags(at.get("dominance") or [], at)[:1] %}
+        <span class="tag" style="color:#c8a06a">{{ d }}</span>
+        {% endfor %}
+        {% for p in visible_tags(at.get("pacing") or [], at)[:1] %}
+        <span class="tag" style="color:#7a9e7a">{{ p }}</span>
+        {% endfor %}
+        {% for a in visible_tags(at.get("awareness") or [], at)[:1] %}
+        <span class="tag" style="color:#8a9abf">{{ a }}</span>
+        {% endfor %}
+      </div>
+      {% if s.description %}
+      <div class="story-desc">{{ s.description }}</div>
+      {% endif %}
+      <div style="margin-top:0.4rem; display:flex; align-items:center; flex-wrap:wrap; gap:0.25rem;">
+        {% if prefs %}
+        {% set status = prefs.story_status(s.id) %}
+        <button onclick="cardLike(this,'{{ s.id }}','liked')"
+                style="background:{{ '#e8f4e8' if status=='liked' else 'transparent' }};
+                       border:1px solid {{ '#4a8a4a' if status=='liked' else 'var(--border)' }};
+                       color:{{ '#2a5a2a' if status=='liked' else 'var(--muted)' }};
+                       padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                       font-size:0.75rem; font-family:inherit;">
+          {{ ("&#9829;" if status=='liked' else "&#9825;") | safe }} Like
+        </button>
+        {% if status == 'liked' %}
+        <button onclick="cardLike(this,'{{ s.id }}','none')"
+                style="background:transparent; border:1px solid var(--border);
+                       color:var(--muted); padding:0.15rem 0.6rem; border-radius:3px;
+                       cursor:pointer; font-size:0.75rem; font-family:inherit;">
+          &#10005; Unlike
+        </button>
+        {% endif %}
+        {% endif %}
+        {% if prefs %}
+        <button class="want-btn" data-wanted="{{ '1' if prefs.is_wanted(s.id) else '0' }}"
+                onclick="cardWant(this,'{{ s.id }}')"
+                style="background:{{ '#e8f4e8' if prefs.is_wanted(s.id) else 'transparent' }};
+                       border:1px solid {{ '#4a7a4a' if prefs.is_wanted(s.id) else 'var(--border)' }};
+                       color:{{ '#2a5a2a' if prefs.is_wanted(s.id) else 'var(--muted)' }};
+                       padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                       font-size:0.75rem; font-family:inherit;">
+          &#128278; {{ "Wanted" if prefs.is_wanted(s.id) else "Want" }}
+        </button>
+        {% endif %}
+        <button class="preview-btn" onclick="togglePreview(this,'{{ s.id }}')">&#9656; Preview</button>
+      </div>
+      <div class="preview-box" id="preview-{{ s.id }}"></div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted); margin-top:2rem;">No stories found. Try adjusting your filters.</p>
+    {% endfor %}
+    </div>
+
+<script>
+function cardLike(btn, id, status) {
+  fetch('/api/like/' + id, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status: status})})
+  .then(r => r.json()).then(d => {
+    if (d.ok) {
+      var card = btn.closest('.story-card');
+      var wrap = btn.parentElement;
+      if (status === 'liked') {
+        btn.innerHTML = '&#9829; Like';
+        btn.style.background = '#e8f4e8';
+        btn.style.borderColor = '#4a8a4a';
+        btn.style.color = '#2a5a2a';
+        btn.onclick = function(){ cardLike(btn, id, 'none'); };
+        if (!wrap.querySelector('.unlike-btn')) {
+          var u = document.createElement('button');
+          u.className = 'unlike-btn';
+          u.innerHTML = '&#10005; Unlike';
+          u.style.cssText = 'background:transparent;border:1px solid var(--border);color:var(--muted);padding:0.15rem 0.6rem;border-radius:3px;cursor:pointer;font-size:0.75rem;font-family:inherit;';
+          u.onclick = function(){ cardLike(u, id, 'none'); };
+          wrap.insertBefore(u, wrap.querySelector('.preview-btn'));
+        }
+        // update badge
+        var badge = card.querySelector('.pref-badge.badge-liked');
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'pref-badge badge-liked';
+          card.querySelector('.story-title').appendChild(badge);
+        }
+        badge.textContent = '&#9829; liked';
+      } else {
+        btn.innerHTML = '&#9825; Like';
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--muted)';
+        btn.onclick = function(){ cardLike(btn, id, 'liked'); };
+        var u = wrap.querySelector('.unlike-btn');
+        if (u) u.remove();
+      }
+    }
+  });
+}
+
+// ── Story preview ──────────────────────────────────────────────────────────
+var _previewCache = {};
+function togglePreview(btn, id) {
+  var box = document.getElementById('preview-' + id);
+  if (box.classList.contains('open')) {
+    box.classList.remove('open');
+    btn.innerHTML = '&#9656; Preview';
+    return;
+  }
+  btn.innerHTML = '&#9660; Preview';
+  box.classList.add('open');
+  if (_previewCache[id]) { renderPreview(box, _previewCache[id]); return; }
+  box.textContent = 'Loading\u2026';
+  fetch('/api/preview/' + id)
+    .then(r => r.json())
+    .then(d => {
+      _previewCache[id] = d.text || '';
+      renderPreview(box, _previewCache[id]);
+    })
+    .catch(() => { box.textContent = 'Preview unavailable.'; });
+}
+function renderPreview(box, text) {
+  var q = (new URLSearchParams(window.location.search)).get('q') || '';
+  if (q) {
+    var words = q.trim().split(' ').filter(Boolean)
+                 .map(w => w.replace(/[.*+?^$()|]/g, '\\$1'));
+    var re = new RegExp('(' + words.join('|') + ')', 'gi');
+    box.innerHTML = text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                        .replace(re, '<mark class="hl">$1</mark>');
+  } else {
+    box.textContent = text;
+  }
+}
+</script>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+      {% if page > 1 %}<a href="?{{ params }}&page={{ page-1 }}">&laquo;</a>{% endif %}
+      {% for p in range([1, page-3]|max, [total_pages+1, page+4]|min) %}
+        {% if p == page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="?{{ params }}&page={{ p }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+      {% if page < total_pages %}<a href="?{{ params }}&page={{ page+1 }}">&raquo;</a>{% endif %}
+    </div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

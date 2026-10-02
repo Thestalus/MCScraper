@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1.5rem;">
+  <h1 class="page-title" style="margin:0;border:none;">&#128278; Want to Read</h1>
+  <span style="font-size:0.82rem; color:var(--muted);">{{ stories|length }} stories</span>
+</div>
+{% if not stories %}
+<div style="text-align:center; padding:3rem; color:var(--muted);">
+  <p style="font-size:1.1rem; margin-bottom:0.75rem;">No stories saved yet.</p>
+  <p>Click &#128278; Want on any story card to save it for later.</p>
+  <p style="margin-top:1rem;"><a href="/">Browse stories &rarr;</a></p>
+</div>
+{% else %}
+<div class="story-grid">
+{% for s in stories %}
+{% set at = story_tags(s) %}
+<div class="story-card">
+  <div class="story-title">
+    <a href="/story/{{ s.id }}">{{ s | dt }}</a>
+    <span class="pref-badge badge-wtr">&#128278; want to read</span>
+  </div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author or "Unknown" }}</a></span>
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} ch</span>{% endif %}
+  </div>
+  <div>
+    {% for cat in s.categories[:6] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}<span class="tag mc-type">{{ mc }}</span>{% endfor %}
+  </div>
+  {% if s.description %}<div class="story-desc">{{ s.description }}</div>{% endif %}
+  <div style="margin-top:0.4rem;">
+    <button onclick="removeWant('{{ s.id }}', this)"
+            style="font-size:0.78rem; color:var(--muted); background:none; border:none;
+                   cursor:pointer; padding:0;">&#10005; Remove</button>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+<script>
+function removeWant(id, btn) {
+  fetch('/api/want/' + id, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wanted: false})})
+  .then(r => r.json()).then(d => {
+    if (d.ok && !d.wanted) {
+      var card = btn.closest('.story-card');
+      if (card) { card.style.opacity='0'; card.style.transition='opacity 0.2s';
+                  setTimeout(function(){ card.remove(); }, 200); }
+    }
+  });
+}
+</script>
+{% endblock %}

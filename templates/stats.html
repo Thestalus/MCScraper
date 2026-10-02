@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Dataset Statistics</h1>
+<div class="stats-grid" style="margin-bottom:2rem">
+  <div class="stat-card"><span class="stat-value">{{ "{:,}".format(stats.total) }}</span><div class="stat-label">Stories</div></div>
+  <div class="stat-card"><span class="stat-value">{{ "{:,}".format(stats.authors) }}</span><div class="stat-label">Authors</div></div>
+  <div class="stat-card"><span class="stat-value">{{ "{:,.0f}".format(stats.avg_words) }}</span><div class="stat-label">Avg words</div></div>
+  <div class="stat-card"><span class="stat-value">{{ stats.total_words_m }}M</span><div class="stat-label">Total words</div></div>
+  <div class="stat-card"><span class="stat-value">{{ stats.multi_chapter }}</span><div class="stat-label">Multi-chapter</div></div>
+  <div class="stat-card"><span class="stat-value">{{ stats.errors }}</span><div class="stat-label">Fetch errors</div></div>
+</div>
+<h2 style="font-size:1.1rem; color:var(--muted); margin-bottom:1rem; font-weight:400">Top Tags</h2>
+<div class="tag-cloud">
+{% for tag, count in stats.top_tags %}
+<a href="/tag/{{ tag }}" class="tag-cloud-item">
+  <span class="mono">{{ tag }}</span> <span style="color:var(--muted)">{{ count }}</span>
+</a>
+{% endfor %}
+</div>
+{% endblock %}

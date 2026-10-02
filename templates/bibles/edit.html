@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; gap:1rem; align-items:center; margin-bottom:1.5rem;">
+  <h1 class="page-title" style="margin:0;border:none;">
+    {{ "Edit" if bible.id else "New" }} Story Bible
+  </h1>
+  {% if bible.id %}
+  <a href="/bibles/{{ bible.id }}/write" style="background:#3d2b1a; color:#e8c99a;
+     padding:0.35rem 0.9rem; border-radius:4px; font-size:0.88rem;">&#9998; Write Chapter</a>
+  {% endif %}
+</div>
+
+<form method="post" style="max-width:860px;">
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;">
+
+<div>
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">Story Title</label>
+    <input name="title" type="text" value="{{ bible.title }}" required
+           style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                  color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                  font-family:inherit; font-size:1rem;">
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+      Premise <span style="font-weight:normal; text-transform:none;">(1 paragraph)</span>
+    </label>
+    <textarea name="premise" rows="4"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                     font-family:inherit; font-size:0.95rem; resize:vertical;">{{ bible.premise }}</textarea>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">Setting</label>
+    <textarea name="setting" rows="3"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                     font-family:inherit; font-size:0.95rem; resize:vertical;">{{ bible.setting }}</textarea>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+      Tone &amp; style notes
+    </label>
+    <textarea name="tone" rows="3"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                     font-family:inherit; font-size:0.95rem; resize:vertical;">{{ bible.tone }}</textarea>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+      Category tags <span style="font-weight:normal; text-transform:none;">(space-separated, e.g. mc mf hm)</span>
+    </label>
+    <input name="tags" type="text" value="{{ bible.tags | join(' ') }}"
+           style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                  color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                  font-family:inherit; font-size:0.95rem;">
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+      Active plot threads <span style="font-weight:normal; text-transform:none;">(one per line)</span>
+    </label>
+    <textarea name="threads" rows="4"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.4rem 0.7rem; border-radius:4px;
+                     font-family:inherit; font-size:0.95rem; resize:vertical;">{{ bible.threads | join("\n") }}</textarea>
+  </div>
+</div>
+
+<div>
+  <!-- Power dynamic -->
+  <div style="background:var(--bg3); border:1px solid var(--border); border-radius:6px;
+              padding:1rem; margin-bottom:1rem;">
+    <div style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:0.08em; margin-bottom:0.75rem;">Power Dynamic</div>
+    {% for field, label in [("dominant","Dominant figure"),("submissive","Subject/submissive"),
+                             ("method","Control method"),("current_state","Current state")] %}
+    <div style="margin-bottom:0.6rem;">
+      <label style="font-size:0.78rem; color:var(--muted); display:block; margin-bottom:0.2rem;">
+        {{ label }}</label>
+      <input name="dynamic_{{ field }}" type="text" value="{{ bible.dynamic.get(field, '') }}"
+             style="width:100%; background:var(--bg2); border:1px solid var(--border);
+                    color:var(--text); padding:0.35rem 0.6rem; border-radius:4px;
+                    font-family:inherit; font-size:0.88rem;">
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Characters -->
+  <div style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+              letter-spacing:0.08em; margin-bottom:0.5rem;">Characters</div>
+  <div id="characters">
+  {% for c in bible.characters %}
+  <div class="char-block" style="background:var(--bg3); border:1px solid var(--border);
+       border-radius:6px; padding:0.75rem; margin-bottom:0.75rem;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.5rem;">
+      <input name="char_name" placeholder="Name" value="{{ c.name }}"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.88rem;">
+      <input name="char_role" placeholder="Role (protagonist/antagonist/etc)" value="{{ c.role }}"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.88rem;">
+    </div>
+    <textarea name="char_description" placeholder="Physical appearance and personality" rows="2"
+              style="width:100%; background:var(--bg2); border:1px solid var(--border);
+                     color:var(--text); padding:0.3rem 0.5rem; border-radius:4px;
+                     font-family:inherit; font-size:0.88rem; resize:vertical; margin-bottom:0.4rem;">{{ c.description }}</textarea>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+      <input name="char_arc" placeholder="Character arc" value="{{ c.arc }}"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.82rem;">
+      <input name="char_state" placeholder="Current state in story" value="{{ c.current_state }}"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.82rem;">
+    </div>
+    <button type="button" onclick="this.closest('.char-block').remove()"
+            style="margin-top:0.4rem; background:none; border:none; color:var(--muted);
+                   cursor:pointer; font-size:0.78rem;">&#10005; Remove character</button>
+  </div>
+  {% endfor %}
+  </div>
+  <button type="button" onclick="addCharacter()"
+          style="background:var(--bg3); border:1px solid var(--border); color:var(--muted);
+                 padding:0.35rem 0.75rem; border-radius:4px; font-family:inherit;
+                 font-size:0.85rem; cursor:pointer; width:100%; margin-bottom:0.75rem;">
+    + Add character
+  </button>
+</div>
+
+</div><!-- end grid -->
+
+<div style="display:flex; gap:1rem; margin-top:1.5rem;">
+  <button type="submit" style="background:#3d2b1a; color:#e8c99a; border:none;
+          padding:0.5rem 1.5rem; border-radius:6px; font-family:inherit; font-size:1rem;
+          cursor:pointer;">Save Bible</button>
+  <a href="/bibles" style="padding:0.5rem 1rem; color:var(--muted); font-size:0.9rem;">
+    Cancel</a>
+  {% if bible.id %}
+  <button type="button" onclick="deleteBible('{{ bible.id }}')"
+          style="margin-left:auto; background:none; border:1px solid #8b2a2a; color:#8b2a2a;
+                 padding:0.4rem 0.9rem; border-radius:4px; font-family:inherit;
+                 font-size:0.85rem; cursor:pointer;">Delete bible</button>
+  {% endif %}
+</div>
+</form>
+
+<script>
+function addCharacter() {
+  const tmpl = `<div class="char-block" style="background:var(--bg3); border:1px solid var(--border);
+     border-radius:6px; padding:0.75rem; margin-bottom:0.75rem;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.5rem;">
+      <input name="char_name" placeholder="Name"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.88rem;">
+      <input name="char_role" placeholder="Role"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.88rem;">
+    </div>
+    <textarea name="char_description" placeholder="Physical appearance and personality" rows="2"
+              style="width:100%; background:var(--bg2); border:1px solid var(--border);
+                     color:var(--text); padding:0.3rem 0.5rem; border-radius:4px;
+                     font-family:inherit; font-size:0.88rem; resize:vertical; margin-bottom:0.4rem;"></textarea>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+      <input name="char_arc" placeholder="Character arc"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.82rem;">
+      <input name="char_state" placeholder="Current state"
+             style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                    padding:0.3rem 0.5rem; border-radius:4px; font-family:inherit; font-size:0.82rem;">
+    </div>
+    <button type="button" onclick="this.closest('.char-block').remove()"
+            style="margin-top:0.4rem; background:none; border:none; color:var(--muted);
+                   cursor:pointer; font-size:0.78rem;">&#10005; Remove character</button>
+  </div>`;
+  document.getElementById("characters").insertAdjacentHTML("beforeend", tmpl);
+}
+function deleteBible(id) {
+  if (confirm("Delete this story bible? All chapter records will be lost.")) {
+    fetch("/bibles/" + id + "/delete", {method:"POST"})
+      .then(() => window.location="/bibles");
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Stories similar to &ldquo;{{ story | dt }}&rdquo;</h1>
+<div style="color:var(--muted); margin-bottom:1.5rem; font-size:0.9rem;
+            display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+  <span>by {{ story.author }}</span>
+  {% if story.word_count %}
+  <span>{{ "{:,}".format(story.word_count) }} words</span>
+  {% set half_wc  = (story.word_count // 2) | int %}
+  {% set twice_wc = (story.word_count * 2) | int %}
+  <span style="display:flex; gap:0.4rem;">
+    {% if half_wc > 0 %}
+    <a href="/similar/{{ story.id }}?max_words={{ half_wc }}"
+       style="font-size:0.8rem; background:var(--bg3); border:1px solid var(--border);
+              color:var(--muted); padding:0.15rem 0.55rem; border-radius:4px;
+              text-decoration:none;" title="Show only stories shorter than half this length">
+      &darr; shorter
+    </a>
+    {% endif %}
+    <a href="/similar/{{ story.id }}?min_words={{ twice_wc }}"
+       style="font-size:0.8rem; background:var(--bg3); border:1px solid var(--border);
+              color:var(--muted); padding:0.15rem 0.55rem; border-radius:4px;
+              text-decoration:none;" title="Show only stories longer than twice this length">
+      &uarr; longer
+    </a>
+    {% if request.args.get("max_words") or request.args.get("min_words") %}
+    <a href="/similar/{{ story.id }}"
+       style="font-size:0.8rem; background:var(--bg3); border:1px solid var(--border);
+              color:var(--muted); padding:0.15rem 0.55rem; border-radius:4px;
+              text-decoration:none;">&#215; clear</a>
+    {% endif %}
+  </span>
+  {% endif %}
+  {% if not index_ready %}
+  <span style="color:var(--accent2)">&#9203; Building similarity index&hellip; refresh in a moment</span>
+  {% endif %}
+</div>
+<div class="story-grid">
+{% for sim, score in results %}
+<div class="story-card">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div class="story-title"><a href="/story/{{ sim.id }}">{{ sim | dt }}</a></div>
+    <div style="font-size:0.75rem; color:var(--muted); font-family:monospace; white-space:nowrap; padding-left:1rem;">
+      {{ "%.0f"|format(score*100) }}% match
+    </div>
+  </div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ sim.author | urlencode }}">{{ sim.author }}</a></span>
+    <span>{{ "{:,}".format(sim.word_count) }} words</span>
+    {% if (sim.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ sim.chapter_count }} ch</span>{% endif %}
+  </div>
+  {% set at = story_tags(sim) %}
+  <div>
+    {% for cat in sim.categories[:5] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}<span class="tag mc-type">{{ mc }}</span>{% endfor %}
+    {% for t in visible_tags(at.get("themes") or [], at)[:2] %}<span class="tag" style="color:#a0c898;font-size:0.75rem;">{{ t }}</span>{% endfor %}
+    {% for d in visible_tags(at.get("dominance") or [], at)[:1] %}<span class="tag" style="color:#c8a06a;font-size:0.75rem;">{{ d }}</span>{% endfor %}
+  </div>
+  {% if sim.description %}<div class="story-desc">{{ sim.description }}</div>{% endif %}
+</div>
+{% else %}
+<p style="color:var(--muted)">
+  {% if not index_ready %}Building index&hellip; refresh in 10 seconds{% else %}No similar stories found{% endif %}
+</p>
+{% endfor %}
+</div>
+{% endblock %}

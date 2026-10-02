@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">&#9654; Reading History</h1>
+{% if not entries %}
+<p style="color:var(--muted)">No reading history yet. Open any story to start tracking.</p>
+{% else %}
+<div class="story-grid">
+{% for s, info in entries %}
+{% set at = story_tags(s) %}
+<div class="story-card">
+  <div class="story-title">
+    <a href="/story/{{ s.id }}{% if info.total > 1 %}?ch={{ info.last_chapter }}{% endif %}">{{ s | dt }}</a>
+    {% if info.total > 1 %}
+    <span class="pref-badge badge-history">&#9654; Ch {{ info.last_chapter }}/{{ info.total }}</span>
+    {% else %}
+    <span class="pref-badge badge-history">&#9654; read</span>
+    {% endif %}
+  </div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author or "Unknown" }}</a></span>
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} chapters</span>{% endif %}
+  </div>
+  <div>
+    {% for cat in s.categories[:6] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}<span class="tag mc-type">{{ mc }}</span>{% endfor %}
+  </div>
+  {% if s.description %}<div class="story-desc">{{ s.description }}</div>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

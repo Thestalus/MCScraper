@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:grid; grid-template-columns:1fr 380px; gap:2rem; align-items:start;">
+
+<!-- Output panel -->
+<div>
+  <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+    <h1 class="page-title" style="margin:0; border:none; font-size:1.4rem;">
+      {{ bible.title }} &mdash; Chapter {{ next_chapter }}
+    </h1>
+    <a href="/bibles/{{ bible.id }}/edit" style="font-size:0.82rem; color:var(--muted);">
+      Edit bible</a>
+  </div>
+
+  <!-- Chapter instruction -->
+  <div style="margin-bottom:1rem;">
+    <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+      Chapter direction <span style="font-weight:normal; text-transform:none;">
+      (optional &mdash; what should happen in this chapter?)</span>
+    </label>
+    <textarea id="chapter-instruction" rows="3"
+              placeholder="e.g. Elena visits Dr. Marsh for her second session. She is more compliant but still unaware of what is happening..."
+              style="width:100%; background:var(--bg2); border:1px solid var(--border);
+                     color:var(--text); padding:0.5rem 0.75rem; border-radius:4px;
+                     font-family:inherit; font-size:0.95rem; resize:vertical;"></textarea>
+  </div>
+
+  <div style="display:flex; gap:0.75rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+    <button id="write-btn" onclick="writeChapter()"
+            style="background:#3d2b1a; color:#e8c99a; border:none; padding:0.5rem 1.25rem;
+                   border-radius:6px; font-family:inherit; font-size:0.95rem; cursor:pointer;">
+      &#9998; Write Chapter {{ next_chapter }}
+    </button>
+    <button id="stop-btn" onclick="stopGen()" style="display:none; background:#8b2a2a;
+            color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px;
+            font-family:inherit; font-size:0.88rem; cursor:pointer;">&#9632; Stop</button>
+
+    <!-- LLM endpoint selector (compact) -->
+    <select id="endpoint-select" style="background:var(--bg2); border:1px solid var(--border);
+            color:var(--text); padding:0.4rem 0.6rem; border-radius:4px; font-family:inherit;
+            font-size:0.82rem;" onchange="checkConn()">
+      <option value="lmstudio">LM Studio :1234</option>
+      <option value="ollama">Ollama :11434</option>
+    </select>
+    <select id="model-select" style="background:var(--bg2); border:1px solid var(--border);
+            color:var(--text); padding:0.4rem 0.6rem; border-radius:4px; font-family:inherit;
+            font-size:0.82rem; min-width:160px;">
+      <option value="auto">Auto-detect model</option>
+    </select>
+    <span id="conn-status" style="font-size:0.8rem; color:var(--muted); align-self:center;"></span>
+  </div>
+
+  <div id="output-text"
+       style="font-family:'Crimson Pro',Georgia,serif; font-size:1.15rem; line-height:2.0;
+              max-width:780px; white-space:pre-wrap; min-height:200px;
+              border-top:1px solid var(--border); padding-top:1.25rem;"></div>
+
+  <!-- Save controls (shown after generation) -->
+  <div id="save-controls" style="display:none; margin-top:1.5rem; padding:1rem;
+       background:var(--bg2); border:1px solid var(--border); border-radius:6px;">
+    <div style="font-size:0.88rem; margin-bottom:0.75rem; font-weight:500;">
+      Save Chapter {{ next_chapter }} to bible?
+    </div>
+    <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
+      <div style="flex:1; min-width:200px;">
+        <input id="chapter-title" type="text" placeholder="Chapter title (optional)"
+               style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                      color:var(--text); padding:0.35rem 0.6rem; border-radius:4px;
+                      font-family:inherit; font-size:0.88rem; margin-bottom:0.5rem;">
+        <textarea id="chapter-summary" rows="2"
+                  placeholder="Summary (or click Auto-summarise)"
+                  style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                         color:var(--text); padding:0.35rem 0.6rem; border-radius:4px;
+                         font-family:inherit; font-size:0.85rem; resize:vertical;"></textarea>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button onclick="autoSummarise()"
+                style="background:var(--bg3); border:1px solid var(--border); color:var(--text);
+                       padding:0.35rem 0.75rem; border-radius:4px; font-family:inherit;
+                       font-size:0.82rem; cursor:pointer;">&#9881; Auto-summarise</button>
+        <button onclick="saveChapter()"
+                style="background:#3d2b1a; color:#e8c99a; border:none; padding:0.35rem 0.75rem;
+                       border-radius:6px; font-family:inherit; font-size:0.88rem; cursor:pointer;">
+          &#10003; Save to bible</button>
+        <button onclick="document.getElementById('save-controls').style.display='none'"
+                style="background:none; border:none; color:var(--muted); cursor:pointer;
+                       font-size:0.82rem;">Discard</button>
+      </div>
+    </div>
+    <div id="save-msg" style="margin-top:0.5rem; font-size:0.82rem; color:#4a8a4a;
+                               display:none;">&#10003; Saved to bible</div>
+  </div>
+</div>
+
+<!-- Bible sidebar -->
+<div style="position:sticky; top:80px;">
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+              padding:1rem; font-size:0.85rem;">
+    <div style="font-size:0.75rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:0.08em; margin-bottom:0.75rem;">Story Bible</div>
+
+    {% if bible.premise %}
+    <p style="color:var(--muted); font-style:italic; margin-bottom:0.75rem; font-size:0.82rem;">
+      {{ bible.premise[:200] }}</p>
+    {% endif %}
+
+    {% if bible.dynamic.dominant or bible.dynamic.submissive %}
+    <div style="margin-bottom:0.75rem; padding:0.6rem; background:var(--bg3);
+                border-radius:4px; font-size:0.82rem;">
+      {% if bible.dynamic.dominant %}
+      <div><span style="color:var(--muted);">Dom:</span> {{ bible.dynamic.dominant }}</div>
+      {% endif %}
+      {% if bible.dynamic.submissive %}
+      <div><span style="color:var(--muted);">Sub:</span> {{ bible.dynamic.submissive }}</div>
+      {% endif %}
+      {% if bible.dynamic.current_state %}
+      <div style="margin-top:0.3rem; color:var(--accent2);">{{ bible.dynamic.current_state }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if bible.characters %}
+    <div style="margin-bottom:0.75rem;">
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:0.35rem;">Characters</div>
+      {% for c in bible.characters %}
+      <div style="margin-bottom:0.3rem;">
+        <strong>{{ c.name }}</strong>
+        {% if c.current_state %}
+        <span style="color:var(--muted); font-size:0.8rem;"> &mdash; {{ c.current_state }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if bible.threads %}
+    <div style="margin-bottom:0.75rem;">
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:0.35rem;">Active threads</div>
+      {% for t in bible.threads %}
+      <div style="font-size:0.8rem; color:var(--text); margin-bottom:0.2rem;">&#8226; {{ t }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if bible.chapters %}
+    <div>
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:0.35rem;">
+        Previous chapters</div>
+      {% for ch in bible.chapters[-4:] %}
+      <div style="margin-bottom:0.4rem; font-size:0.8rem;">
+        <span style="color:var(--accent2);">Ch. {{ ch.number }}</span>
+        {% if ch.title %} {{ ch.title }}{% endif %}
+        {% if ch.summary %}
+        <div style="color:var(--muted); font-size:0.78rem;">{{ ch.summary[:100] }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+</div><!-- grid -->
+
+<script>
+const BIBLE_ID = "{{ bible.id }}";
+const ENDPOINTS = {lmstudio:"http://localhost:1234/v1", ollama:"http://localhost:11434/v1"};
+let controller = null;
+let generatedText = "";
+
+async function checkConn() {
+  const ep  = document.getElementById("endpoint-select").value;
+  const url = ENDPOINTS[ep] || ENDPOINTS.lmstudio;
+  const conn = document.getElementById("conn-status");
+  conn.textContent = "Checking...";
+  try {
+    const r = await fetch("/api/llm/models", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({url, key:"none"})});
+    const d = await r.json();
+    if (d.models && d.models.length) {
+      conn.textContent = "Connected";
+      conn.style.color = "#4a8a4a";
+      const sel = document.getElementById("model-select");
+      sel.innerHTML = d.models.map(m => `<option value="${m}">${m}</option>`).join("");
+    } else {
+      conn.textContent = "No model loaded";
+      conn.style.color = "#8b2a2a";
+    }
+  } catch(e) {
+    conn.textContent = "Not connected";
+    conn.style.color = "#8b2a2a";
+  }
+}
+
+async function writeChapter() {
+  const ep    = document.getElementById("endpoint-select").value;
+  const url   = ENDPOINTS[ep] || ENDPOINTS.lmstudio;
+  const model = document.getElementById("model-select").value || "auto";
+  const instr = document.getElementById("chapter-instruction").value;
+
+  document.getElementById("write-btn").style.display = "none";
+  document.getElementById("stop-btn").style.display  = "block";
+  document.getElementById("save-controls").style.display = "none";
+  const out = document.getElementById("output-text");
+  out.textContent = "";
+  generatedText = "";
+
+  controller = new AbortController();
+  try {
+    const r = await fetch("/api/bible/write", {
+      method:"POST", signal: controller.signal,
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({bible_id: BIBLE_ID, instruction: instr,
+                            url, model, temperature: 0.85, max_tokens: 3000})
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error||"Failed"); }
+
+    const reader  = r.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, {stream:true});
+      generatedText += chunk;
+      out.textContent = generatedText;
+    }
+    document.getElementById("save-controls").style.display = "block";
+  } catch(e) {
+    if (e.name !== "AbortError") out.textContent = "Error: " + e.message;
+  } finally {
+    document.getElementById("write-btn").style.display = "block";
+    document.getElementById("stop-btn").style.display  = "none";
+  }
+}
+
+function stopGen() { if(controller){controller.abort();controller=null;} }
+
+async function autoSummarise() {
+  if (!generatedText) return;
+  const btn = event.target;
+  btn.textContent = "Summarising...";
+  const ep  = document.getElementById("endpoint-select").value;
+  const url = ENDPOINTS[ep] || ENDPOINTS.lmstudio;
+  try {
+    const r = await fetch("/api/bible/summarise", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({text: generatedText, chapter_num: {{ next_chapter }}, url})});
+    const d = await r.json();
+    if (d.summary) document.getElementById("chapter-summary").value = d.summary;
+  } catch(e) { alert("Summarise failed: " + e.message); }
+  finally { btn.textContent = "&#9881; Auto-summarise"; }
+}
+
+async function saveChapter() {
+  const title   = document.getElementById("chapter-title").value;
+  const summary = document.getElementById("chapter-summary").value;
+  const r = await fetch("/api/bible/save-chapter", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({bible_id: BIBLE_ID, chapter_num: {{ next_chapter }},
+                          title, summary, text: generatedText})});
+  const d = await r.json();
+  if (d.ok) {
+    document.getElementById("save-msg").style.display = "block";
+    setTimeout(() => window.location.reload(), 1200);
+  }
+}
+
+window.addEventListener("load", checkConn);
+</script>
+{% endblock %}

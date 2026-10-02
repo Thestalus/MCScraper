@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}MC Archive Browser{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #f7f4f0;
+  --bg2:     #eeeae4;
+  --bg3:     #e4dfd7;
+  --border:  #ccc7bf;
+  --accent:  #8b4513;
+  --accent2: #a0522d;
+  --text:    #2c2418;
+  --muted:   #7a6e62;
+  --danger:  #8b2a2a;
+  --radius:  6px;
+  --liked:   #2a5a2a;
+  --liked-bg:#e8f4e8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: "Crimson Pro", Georgia, serif;
+       font-size: 18px; line-height: 1.6; min-height: 100vh; }
+a { color: var(--accent2); text-decoration: none; }
+a:hover { color: var(--accent); text-decoration: underline; }
+code, .mono { font-family: "JetBrains Mono", monospace; font-size: 0.78em; }
+
+/* Layout */
+.site-header { background: #3d2b1a; border-bottom: 1px solid #2a1d10;
+               padding: 0.75rem 2rem; display: flex; align-items: center; gap: 2rem;
+               position: sticky; top: 0; z-index: 100; }
+.site-logo { font-size: 1.1rem; font-weight: 600; color: #e8c99a; letter-spacing: 0.05em;
+             white-space: nowrap; }
+.site-nav { display: flex; gap: 1.5rem; font-size: 0.9rem; flex-wrap: wrap; }
+.site-nav a { color: #c8aa88; }
+.site-nav a:hover { color: #fff; text-decoration: none; }
+
+.search-bar { flex: 1; display: flex; gap: 0.5rem; }
+.search-bar input { flex: 1; background: #2a1d10; border: 1px solid #5a3d22;
+                    color: #e8c99a; padding: 0.4rem 0.8rem; border-radius: var(--radius);
+                    font-family: inherit; font-size: 0.95rem; }
+.search-bar input::placeholder { color: #8a6a4a; }
+.search-bar input:focus { outline: none; border-color: #c8956a; }
+.search-bar button { background: var(--accent2); color: #fff; border: none;
+                     padding: 0.4rem 1rem; border-radius: var(--radius); cursor: pointer;
+                     font-family: inherit; font-size: 0.9rem; }
+.search-bar button:hover { background: var(--accent); }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+.page-title { font-size: 1.8rem; font-weight: 300; color: var(--accent); margin-bottom: 1.5rem;
+              border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
+
+/* Filters sidebar */
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; }
+.sidebar { font-size: 0.88rem; }
+.filter-section { margin-bottom: 1.5rem; }
+.filter-label { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.1em;
+                text-transform: uppercase; margin-bottom: 0.5rem; display: block; }
+.filter-section select, .filter-section input[type=text],
+.filter-section input[type=number] {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); padding: 0.35rem 0.6rem; border-radius: var(--radius);
+  font-family: inherit; font-size: 0.88rem; }
+.filter-section select:focus, .filter-section input:focus {
+  outline: none; border-color: var(--accent2); }
+.filter-btn { width: 100%; background: var(--accent2); color: var(--text); border: none;
+              padding: 0.5rem; border-radius: var(--radius); cursor: pointer;
+              font-family: inherit; margin-top: 0.5rem; font-size: 0.9rem; }
+.filter-btn:hover { background: var(--accent); }
+.clear-btn { width: 100%; background: transparent; color: var(--muted); border: 1px solid var(--border);
+             padding: 0.4rem; border-radius: var(--radius); cursor: pointer; font-family: inherit;
+             font-size: 0.85rem; margin-top: 0.35rem; }
+.clear-btn:hover { border-color: var(--muted); color: var(--text); }
+
+/* Story cards */
+.results-header { display: flex; justify-content: space-between; align-items: center;
+                  margin-bottom: 1rem; font-size: 0.88rem; color: var(--muted); }
+.story-grid { display: flex; flex-direction: column; gap: 0; }
+.story-card { border-bottom: 1px solid var(--border); padding: 1rem 0;
+              transition: background 0.15s; }
+.story-card:hover { background: var(--bg2); margin: 0 -0.75rem; padding: 0.75rem 0.75rem 1rem; border-radius: var(--radius); border-bottom-color: transparent; }
+.story-card.liked-card { border-left: 3px solid var(--liked); padding-left: 0.75rem; }
+/* Preference highlighting tiers */
+.pref-fave   { border-left: 4px solid #c8956a !important; padding-left: 0.75rem;
+               background: linear-gradient(to right, #fdf6ee 0%, transparent 60%); }
+.pref-author-fave { border-left: 4px solid #c8956a !important;
+               background: linear-gradient(to right, #fdf0e4 0%, transparent 70%); }
+.pref-author { border-left: 4px solid #8ab08a !important; padding-left: 0.75rem;
+               background: linear-gradient(to right, #f2f7f2 0%, transparent 60%); }
+.pref-liked  { border-left: 4px solid #6a8ab0 !important; padding-left: 0.75rem; }
+.pref-badge  { display: inline-block; font-size: 0.68rem; padding: 0.1rem 0.4rem;
+               border-radius: 3px; margin-left: 0.4rem; vertical-align: middle;
+               font-family: "JetBrains Mono", monospace; letter-spacing: 0.02em; }
+.badge-fave  { background: #c8956a; color: #fff; }
+.badge-author{ background: #6a9a6a; color: #fff; }
+.badge-liked { background: #4a7aaa; color: #fff; }
+.story-title { font-size: 1.15rem; font-weight: 400; margin-bottom: 0.2rem; }
+.story-meta { font-size: 0.82rem; color: var(--muted); display: flex; gap: 1rem;
+              flex-wrap: wrap; margin-bottom: 0.4rem; }
+.story-desc { font-size: 0.9rem; color: #a89880; font-style: italic;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+              overflow: hidden; }
+.tag { display: inline-block; background: #ede8e0; border: 1px solid var(--border);
+       padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.75rem; color: var(--muted);
+       font-family: "JetBrains Mono", monospace; margin-right: 0.25rem; }
+.tag:hover { border-color: var(--accent2); color: var(--text); text-decoration: none; }
+.tag.mc-type { background: #f5ece4; border-color: var(--accent2); color: var(--accent); }
+.chapters-badge { background: var(--bg3); border: 1px solid var(--border); padding: 0.1rem 0.4rem;
+                  border-radius: 3px; font-size: 0.75rem; font-family: monospace; }
+
+/* Story reader */
+.reader-header { margin-bottom: 2rem; }
+.reader-title { font-size: 2.2rem; font-weight: 300; color: var(--accent); line-height: 1.2; }
+.reader-meta { margin-top: 0.75rem; color: var(--muted); font-size: 0.9rem; }
+.reader-tags { margin-top: 0.75rem; }
+.chapter-nav { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.chapter-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--muted);
+               padding: 0.3rem 0.8rem; border-radius: var(--radius); cursor: pointer;
+               font-family: "JetBrains Mono", monospace; font-size: 0.8rem; }
+.chapter-btn.active { background: var(--accent2); border-color: var(--accent); color: var(--text); }
+.chapter-btn:hover { border-color: var(--accent2); }
+.story-text { max-width: 960px; font-size: 1.15rem; line-height: 2.0;
+              letter-spacing: 0.01em; }
+.story-text p { margin-top: 0; margin-bottom: 1.2em; }
+.story-text h3 + p, .story-text h3 + section { margin-top: 0.75em; }
+.chapter-divider { text-align: center; color: var(--muted); margin: 2rem 0; letter-spacing: 0.3em; }
+
+/* mcstories.com story formatting — adapted for dark theme */
+.story-text blockquote { margin-left:1.25em; margin-right:2em;
+    border-left:3px solid var(--border); padding-left:0.75em; }
+.story-text .textMessage { font-family:Verdana,"Lucida Sans Unicode","Lucida Grande",sans-serif;
+    font-style:normal; font-size:85%; }
+.story-text em em { font-style:normal; }
+.story-text em em em { font-style:italic; }
+.story-text .overstrike { text-decoration:line-through; }
+.story-text .signed, .story-text .inlineDate, .story-text .caption { font-style:italic; }
+.story-text .stage { font-style:italic; }
+.story-text pre, .story-text kbd, .story-text .typewriter {
+    font-family:"Courier New",Courier,monospace; font-size:85%;
+    white-space:pre-wrap; }
+.story-text .milestone { display:block; text-align:center; font-size:130%;
+    letter-spacing:1em; margin:1em 0; }
+.story-text h3.email { font-size:110%; }
+.story-text .epigraph { margin:1em 0; }
+.story-text .epigraph .bibl { text-align:right; margin-right:4em; }
+.story-text .lg, .story-text .sp { margin:1em 0; }
+.story-text div.indented { margin-left:2em; }
+.story-text .screenplay { font-family:"Courier New",Courier,monospace;
+    text-indent:0; margin-left:1em; }
+.story-text .screenplay dt { display:block; text-align:center; }
+.story-text .screenplay .caption { text-align:center; }
+.story-text .screenplay p { text-indent:0; }
+.story-text section + section { margin-top:2em; }
+.story-text hr { border:none; border-top:1px solid var(--border); margin:1.5em auto;
+    width:30%; }
+
+/* Pagination */
+.pagination { display: flex; gap: 0.5rem; justify-content: center; margin-top: 2rem; }
+.pagination a, .pagination span { padding: 0.4rem 0.8rem; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 0.88rem; }
+.pagination a:hover { border-color: var(--accent2); text-decoration: none; }
+.pagination .current { background: var(--accent2); border-color: var(--accent); color: var(--text); }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+.stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+             padding: 1.25rem; text-align: center; }
+.stat-value { font-size: 2rem; font-weight: 300; color: var(--accent); display: block; }
+.stat-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase;
+              letter-spacing: 0.08em; margin-top: 0.25rem; }
+.tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.tag-cloud-item { background: var(--bg2); border: 1px solid var(--border);
+                  padding: 0.25rem 0.6rem; border-radius: 3px; font-size: 0.82rem; }
+.tag-cloud-item:hover { border-color: var(--accent2); text-decoration: none; }
+
+/* Error */
+.error-box { background: #1a0e0e; border: 1px solid var(--danger); border-radius: var(--radius);
+             padding: 1.5rem; margin: 2rem 0; }
+/* Story preview */
+.preview-box { display:none; margin-top:0.6rem; padding:0.6rem 0.8rem;
+               background:var(--bg); border:1px solid var(--border); border-radius:4px;
+               font-size:0.86rem; line-height:1.6; color:#c8b8a8; max-height:200px;
+               overflow-y:auto; white-space:pre-wrap; }
+.preview-box.open { display:block; }
+.preview-btn { background:none; border:1px solid var(--border); color:var(--muted);
+               padding:0.12rem 0.5rem; border-radius:3px; cursor:pointer;
+               font-size:0.75rem; font-family:inherit; margin-left:0.3rem; }
+.preview-btn:hover { border-color:var(--accent2); color:var(--text); }
+mark.hl { background:#5a4a20; color:#f0d890; border-radius:2px; padding:0 2px; }
+/* History badge */
+.badge-history { background:#1e2e3a; color:#6aaccc; border:1px solid #3a5a7a; }
+.badge-wtr     { background:#1e3a2a; color:#6acc88; border:1px solid #3a7a4a; }
+/* Tag tooltips */
+.tag { position: relative; }
+.tag-tip { display: none; position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
+           background: #2a2520; border: 1px solid var(--accent2); color: var(--text);
+           padding: 0.3rem 0.6rem; border-radius: 4px; white-space: nowrap; font-size: 0.78rem;
+           font-family: "Crimson Pro", serif; z-index: 200; pointer-events: none; }
+.tag:hover .tag-tip { display: block; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a class="site-logo" href="/" style="text-decoration:none;">&#8853; MC Archive</a>
+  <form class="search-bar" action="/search" method="get" id="search-bar-form">
+    <input type="text" name="q" placeholder="Search titles, authors, tags, descriptions&hellip;"
+           value="{{ request.args.get('q', '') }}">
+    <button type="submit">Search</button>
+  </form>
+  <script>
+  /* Preserve active filters when the top search bar is submitted.
+     Copies all current URL params (except 'q' and 'page') into the form
+     as hidden fields so filters survive a search text change. */
+  document.getElementById('search-bar-form').addEventListener('submit', function() {
+    var form = this;
+    var params = new URLSearchParams(window.location.search);
+    params.forEach(function(val, key) {
+      if (key === 'q' || key === 'page') return;
+      var h = document.createElement('input');
+      h.type = 'hidden'; h.name = key; h.value = val;
+      form.appendChild(h);
+    });
+  });
+  </script>
+  <nav class="site-nav">
+    <a href="/">Browse</a>
+    <a href="/recommendations">&#9829; For You</a>
+    <a href="/liked">&#9733; Liked</a>
+    <a href="/history">&#9654; History</a>
+    <a href="/want-to-read">&#128278; Want to read</a>
+    <a href="/new-stories">&#9679; New</a>
+    <a href="/authors">Authors</a>
+    <a href="/tags">Tags</a>
+    <a href="/random">Random</a>
+    <a href="/generate">&#9998; Generate</a>
+    <a href="/bibles">&#128218; Bibles</a>
+  </nav>
+</header>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+<script>
+const TAG_LABELS = {
+  mc:"mind control",hm:"hypnosis",ma:"magic",dr:"drugs/chemicals",ts:"tech/science",
+  al:"alien",rb:"robot/android",tf:"transformation",ps:"psychic/telepathy",
+  ss:"subliminal/suggestion",uc:"unconscious/sleep",po:"possession",rc:"remote control",
+  mw:"mind wipe",bh:"body horror",mf:"male/female",ff:"female/female",mm:"male/male",
+  fm:"female/male (f-dom)",fd:"female dominant",md:"male dominant",fu:"futanari",
+  tg:"transgender",cd:"cross-dressing",sx:"sex change",bi:"bisexual",
+  bd:"bondage/restraint",ds:"dominant/submissive",nc:"non-consent",
+  rp:"reluctance/resistance",cb:"corruption/bimbofication",la:"lactation",
+  "in":"incest",ws:"watersports",sn:"snuff",be:"breast expansion",mu:"multiple partners",
+  or:"oral sex",an:"anal sex",ex:"exhibitionism",vo:"voyeurism",hu:"humiliation",
+  sm:"sadomasochism",sp:"spanking",pe:"pegging",sl:"slavery/enslavement",
+  si:"sissification",pt:"petplay",dg:"degradation",to:"torture",
+  pr:"pregnancy/impregnation",mn:"masturbation",se:"seduction",th:"threesome",
+  sw:"swapping/swinging",cr:"crushing/shrinking",gi:"giantess",ti:"tickling",
+  ft:"fantasy",sf:"sci-fi",sc:"sci-fi/science",ro:"romance",gr:"growth/physical change",
+  ca:"celebrity/public figure",va:"vampire",wl:"werewolf",zo:"zoophilia",
+  gh:"ghost/supernatural",cy:"cyberpunk",vr:"virtual reality",tm:"time manipulation",
+  uw:"underwater",ns:"non-sexual",lt:"lite/softcore",lo:"long story",ob:"obedience",
+  ls:"loss of self/identity",lc:"loss of control",mr:"mind reading",gm:"gender morph",
+  nd:"nudity",un:"uniform/costume",aa:"interracial",et:"ethnicity/interracial",
+  ag:"age progression/regression",rs:"roleplay/scenario",nf:"non-consensual fantasy",
+  hy:"hypnosis"
+};
+function cardWant(btn, id) {
+  var active = btn.dataset.wanted === '1';
+  fetch('/api/want/' + id, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wanted: !active})})
+  .then(r => r.json()).then(d => {
+    if (d.ok) {
+      btn.dataset.wanted = d.wanted ? '1' : '0';
+      btn.innerHTML = d.wanted ? '&#128278; Wanted' : '&#128278; Want';
+      btn.style.background = d.wanted ? '#e8f4e8' : 'transparent';
+      btn.style.borderColor = d.wanted ? '#4a7a4a' : 'var(--border)';
+      btn.style.color = d.wanted ? '#2a5a2a' : 'var(--muted)';
+    }
+  });
+}
+document.querySelectorAll(".tag").forEach(el => {
+  const code = el.textContent.trim().toLowerCase();
+  if (TAG_LABELS[code]) {
+    el.style.cursor = "help";
+    const tip = document.createElement("span");
+    tip.className = "tag-tip";
+    tip.textContent = TAG_LABELS[code];
+    el.appendChild(tip);
+    el.title = TAG_LABELS[code];
+  }
+});
+</script>
+</body>
+</html>

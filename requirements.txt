@@ -1,0 +1,38 @@
+# Core dependencies (required)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+flask>=3.0.0
+
+# Testing
+pytest>=8.0.0
+
+# Numeric / embeddings (required by recommender, tagger, setfit)
+numpy>=1.26.0
+
+# Streaming JSON (required by wayback_scraper, build_search_db, text_store, update)
+# Install with: pip install ijson
+ijson>=3.2.0
+
+# Anthropic API (required by auto_label, fp_audit_auto_review, arc_audit)
+# Install with: pip install anthropic
+anthropic>=0.25.0
+
+# Optional: semantic tagging + SetFit ML classifiers
+# Install with: make install-semantic  OR  pip install sentence-transformers setfit
+sentence-transformers>=2.7.0
+setfit>=1.0.0
+
+# Optional: word-split repair for OCR artefacts (fix_text.py)
+# Install with: pip install wordninja
+wordninja>=1.0.0
+
+# Optional: OCR ingestion of image/screenshot files (ingest.py)
+# Requires Tesseract binary: brew install tesseract
+# Install with: make install-ocr  OR  pip install pytesseract pillow
+pytesseract>=0.3.10
+pillow>=10.0.0
+
+# Optional: LLM fine-tuning (train.py) — install manually, version-sensitive
+# pip install torch transformers peft bitsandbytes accelerate
+# See TRAINING_GUIDE.md for version requirements

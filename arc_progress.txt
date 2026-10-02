@@ -1,0 +1,43 @@
+=== Arc Tagger Progress Report ===
+Generated: 2026-03-22 22:56:30
+
+Stories processed:  60 / 10
+Results parsed:     678
+Last checkpoint:    55 ok, 0 failed, 0 skipped
+Elapsed:            14h 25m 41s
+Avg per story:      77s
+Stories remaining:  -50
+ETA:                -1.1 hours (-0.0 days)
+
+--- Ending state ---
+  contentedly submissive                         309  (45.6%)
+  ambiguous                                       72  (10.6%)
+  stepfordized                                    69  (10.2%)
+  broken                                          66  (9.7%)
+  rescued / restored                              59  (8.7%)
+  still resisting                                 32  (4.7%)
+  resigned                                        24  (3.5%)
+  unaware                                         21  (3.1%)
+  fully willing                                   17  (2.5%)
+  escaped                                          9  (1.3%)
+
+--- Dominant type ---
+  authority figure                               161  (23.7%)
+  romantic partner                               129  (19.0%)
+  supernatural being                             106  (15.6%)
+  stranger                                       105  (15.5%)
+  friend / peer                                   63  (9.3%)
+  AI / machine / device                           36  (5.3%)
+  stage hypnotist                                 34  (5.0%)
+  organisation / group                            18  (2.7%)
+  ambiguous                                       13  (1.9%)
+  family member                                   12  (1.8%)
+  self                                             1  (0.1%)
+
+--- Subject change ---
+  significant change                             581  (85.7%)
+  stepfordized                                    56  (8.3%)
+  bimboized                                       13  (1.9%)
+  no change                                       12  (1.8%)
+  complete transformation                         11  (1.6%)
+  changed then restored                            5  (0.7%)

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1.5rem; margin-bottom:0.5rem;">
+  <h1 class="page-title" style="margin:0;border:none;">{{ author }}</h1>
+  <button id="follow-btn" onclick="toggleFollow()"
+          style="background:{{ '#e8f4e8' if author_status=='liked' else 'var(--bg2)' }};
+                 border:1px solid {{ '#4a8a4a' if author_status=='liked' else 'var(--border)' }};
+                 color:{{ '#2a5a2a' if author_status=='liked' else 'var(--muted)' }};
+                 padding:0.3rem 0.9rem; border-radius:4px; cursor:pointer;
+                 font-family:inherit; font-size:0.88rem;">
+    {{ ("&#9733; Following" if author_status=='liked' else "&#9734; Follow") | safe }}
+  </button>
+  <a href="/author-similar/{{ author | urlencode }}"
+     style="font-size:0.88rem; color:var(--muted);">Similar authors &rarr;</a>
+</div>
+<p style="color:var(--muted); margin-bottom:1.5rem">{{ stories|length }} stories</p>
+<script>
+function toggleFollow() {
+  const isFollowing = document.getElementById('follow-btn').textContent.includes('Following');
+  fetch('/api/like-author/{{ author | urlencode }}', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: isFollowing ? 'none' : 'liked'})
+  }).then(r => r.json()).then(d => { if(d.ok) location.reload(); });
+}
+</script>
+<div class="story-grid">
+{% for s in stories %}
+{% set visit = prefs.visit_info(s.id) if prefs else none %}
+<div class="story-card">
+  <div class="story-title">
+    <a href="/story/{{ s.id }}">{{ s | dt }}</a>
+    {% if visit %}
+      {% if visit.total > 1 %}
+      <span class="pref-badge badge-history">&#9654; Ch {{ visit.last_chapter }}/{{ visit.total }}</span>
+      {% else %}
+      <span class="pref-badge badge-history">&#9654; read</span>
+      {% endif %}
+    {% endif %}
+    {% if prefs and prefs.is_wanted(s.id) %}<span class="pref-badge badge-wtr">&#128278; want to read</span>{% endif %}
+  </div>
+  <div class="story-meta">
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} ch</span>{% endif %}
+    {% if s.added_date %}<span>{{ s.added_date }}</span>{% endif %}
+  </div>
+  <div>{% for cat in s.categories[:8] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}</div>
+  {% if s.description %}<div class="story-desc">{{ s.description }}</div>{% endif %}
+  <div style="margin-top:0.4rem; display:flex; align-items:center; flex-wrap:wrap; gap:0.25rem;">
+    {% if prefs %}
+    {% set status = prefs.story_status(s.id) %}
+    <button onclick="cardLike(this,'{{ s.id }}','liked')"
+            style="background:{{ '#e8f4e8' if status=='liked' else 'transparent' }};
+                   border:1px solid {{ '#4a8a4a' if status=='liked' else 'var(--border)' }};
+                   color:{{ '#2a5a2a' if status=='liked' else 'var(--muted)' }};
+                   padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                   font-size:0.75rem; font-family:inherit;">
+      {{ ("&#9829;" if status=='liked' else "&#9825;") | safe }} Like
+    </button>
+    {% if status == 'liked' %}
+    <button onclick="cardLike(this,'{{ s.id }}','none')"
+            style="background:transparent; border:1px solid var(--border);
+                   color:var(--muted); padding:0.15rem 0.6rem; border-radius:3px;
+                   cursor:pointer; font-size:0.75rem; font-family:inherit;">
+      &#10005; Unlike
+    </button>
+    {% endif %}
+    {% endif %}
+    {% if prefs %}
+    <button class="want-btn" data-wanted="{{ '1' if prefs.is_wanted(s.id) else '0' }}"
+            onclick="cardWant(this,'{{ s.id }}')"
+            style="background:{{ '#e8f4e8' if prefs.is_wanted(s.id) else 'transparent' }};
+                   border:1px solid {{ '#4a7a4a' if prefs.is_wanted(s.id) else 'var(--border)' }};
+                   color:{{ '#2a5a2a' if prefs.is_wanted(s.id) else 'var(--muted)' }};
+                   padding:0.15rem 0.6rem; border-radius:3px; cursor:pointer;
+                   font-size:0.75rem; font-family:inherit;">
+      &#128278; {{ "Wanted" if prefs.is_wanted(s.id) else "Want" }}
+    </button>
+    {% endif %}
+    <button class="preview-btn" onclick="togglePreview(this,'{{ s.id }}')">&#9656; Preview</button>
+  </div>
+  <div class="preview-box" id="preview-{{ s.id }}"></div>
+</div>
+{% endfor %}
+</div>
+<script>
+function cardLike(btn, id, status) {
+  fetch('/api/like/' + id, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status: status})})
+  .then(r => r.json()).then(d => {
+    if (d.ok) {
+      var wrap = btn.parentElement;
+      if (status === 'liked') {
+        btn.innerHTML = '&#9829; Like';
+        btn.style.background = '#e8f4e8';
+        btn.style.borderColor = '#4a8a4a';
+        btn.style.color = '#2a5a2a';
+        btn.onclick = function(){ cardLike(btn, id, 'none'); };
+        if (!wrap.querySelector('.unlike-btn')) {
+          var u = document.createElement('button');
+          u.className = 'unlike-btn';
+          u.innerHTML = '&#10005; Unlike';
+          u.style.cssText = 'background:transparent;border:1px solid var(--border);color:var(--muted);padding:0.15rem 0.6rem;border-radius:3px;cursor:pointer;font-size:0.75rem;font-family:inherit;';
+          u.onclick = function(){ cardLike(u, id, 'none'); };
+          var pb = wrap.querySelector('.preview-btn');
+          pb ? wrap.insertBefore(u, pb) : wrap.appendChild(u);
+        }
+      } else {
+        btn.innerHTML = '&#9825; Like';
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--muted)';
+        btn.onclick = function(){ cardLike(btn, id, 'liked'); };
+        var u = wrap.querySelector('.unlike-btn');
+        if (u) u.remove();
+      }
+    }
+  });
+}
+var _previewCache = {};
+function togglePreview(btn, id) {
+  var box = document.getElementById('preview-' + id);
+  if (box.classList.contains('open')) {
+    box.classList.remove('open');
+    btn.innerHTML = '&#9656; Preview';
+    return;
+  }
+  btn.innerHTML = '&#9660; Preview';
+  box.classList.add('open');
+  if (_previewCache[id]) { box.textContent = _previewCache[id]; return; }
+  box.textContent = 'Loading\u2026';
+  fetch('/api/preview/' + id)
+    .then(r => r.json())
+    .then(d => { _previewCache[id] = d.text || ''; box.textContent = _previewCache[id]; })
+    .catch(() => { box.textContent = 'Preview unavailable.'; });
+}
+</script>
+{% endblock %}

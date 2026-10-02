@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; align-items:baseline; gap:1.5rem; margin-bottom:0.5rem;">
+  <h1 class="page-title" style="margin:0; border:none;">Authors like {{ author }}</h1>
+  <span id="author-like-status" style="display:flex; gap:0.5rem;">
+    <button onclick="setAuthorLike('liked')"
+            style="background:{{ '#2a4a2a' if author_status=='liked' else 'var(--bg3)' }};
+                   border:1px solid {{ '#4a8a4a' if author_status=='liked' else 'var(--border)' }};
+                   color:{{ '#6aba6a' if author_status=='liked' else 'var(--muted)' }};
+                   padding:0.25rem 0.7rem; border-radius:4px; cursor:pointer;
+                   font-family:inherit; font-size:0.82rem;">
+      &#9829; Like this author
+    </button>
+  </span>
+</div>
+<p style="color:var(--muted); margin-bottom:1.5rem; font-size:0.88rem;">
+  {{ story_count }} stories &nbsp;&middot;&nbsp;
+  <a href="/author/{{ author | urlencode }}">View all stories &rarr;</a>
+</p>
+
+{% if not index_ready %}
+<p style="color:var(--accent2); margin-bottom:1rem;">&#9203; Building index&hellip; refresh in a moment</p>
+{% endif %}
+
+<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1rem;">
+{% for other, score, profile in similar %}
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:1rem;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.4rem;">
+    <a href="/author/{{ other | urlencode }}" style="font-size:1rem; font-weight:500;">{{ other }}</a>
+    <span style="font-size:0.75rem; color:var(--muted); font-family:monospace;">
+      {{ "%.0f"|format(score*100) }}% match
+    </span>
+  </div>
+  <div style="font-size:0.8rem; color:var(--muted); margin-bottom:0.5rem;">
+    {{ profile.story_count }} stories
+  </div>
+  {% if profile.top_themes %}
+  <div style="margin-bottom:0.3rem;">
+    {% for t in profile.top_themes %}<span class="tag" style="color:#a0c898;font-size:0.72rem;">{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if profile.top_mc_types %}
+  <div>
+    {% for m in profile.top_mc_types %}<span class="tag mc-type" style="font-size:0.72rem;">{{ m }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+    <a href="/author-similar/{{ other | urlencode }}"
+       style="font-size:0.78rem; color:var(--muted);">Authors like {{ other }} &rarr;</a>
+  </div>
+</div>
+{% else %}
+<p style="color:var(--muted);">No similar authors found.</p>
+{% endfor %}
+</div>
+
+<script>
+function setAuthorLike(status) {
+  fetch('/api/like-author/{{ author | urlencode }}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({status: status})
+  }).then(r => r.json()).then(d => { if (d.ok) location.reload(); });
+}
+</script>
+{% endblock %}

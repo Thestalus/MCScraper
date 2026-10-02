@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:780px;">
+  <div style="display:flex; gap:1.5rem; align-items:baseline; margin-bottom:1.5rem;">
+    <h1 class="page-title" style="margin:0;border:none;">{{ bible.title }}</h1>
+    <a href="/bibles/{{ bible.id }}/write" style="font-size:0.88rem;">&#9998; Write chapter</a>
+    <a href="/bibles/{{ bible.id }}/edit" style="font-size:0.88rem; color:var(--muted);">Edit</a>
+  </div>
+  {% if bible.premise %}
+  <p style="font-style:italic; color:var(--muted); margin-bottom:2rem; font-size:1.05rem;">
+    {{ bible.premise }}</p>
+  {% endif %}
+  {% for g in generated %}
+  <div style="margin-bottom:3rem;">
+    <h2 style="font-size:1.2rem; color:var(--accent2); margin-bottom:0.25rem; font-weight:400;">
+      Chapter {{ g.chapter }}{% if g.title %} &mdash; {{ g.title }}{% endif %}
+    </h2>
+    <div style="font-size:1.15rem; line-height:2.0; white-space:pre-wrap;">{{ g.text }}</div>
+  </div>
+  {% else %}
+  <p style="color:var(--muted);">No chapters generated yet.
+    <a href="/bibles/{{ bible.id }}/write">Write the first chapter &rarr;</a></p>
+  {% endfor %}
+</div>
+{% endblock %}

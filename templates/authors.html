@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Authors ({{ authors|length }})</h1>
+<div style="columns: 3; gap: 2rem; font-size:0.92rem;">
+{% for author, count in authors %}
+<div style="break-inside:avoid; margin-bottom:0.4rem">
+  <a href="/author/{{ author | urlencode }}">{{ author }}</a>
+  <span style="color:var(--muted)"> &middot; {{ count }}</span>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

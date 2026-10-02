@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Tags &amp; Categories</h1>
+
+<h2 style="font-size:1.1rem; font-weight:400; color:var(--accent); margin:0 0 0.75rem;">
+  mcstories.com Category Codes</h2>
+<div class="tag-cloud" style="margin-bottom:2.5rem">
+{% for tag, count in tags %}
+<a href="/tag/{{ tag }}" class="tag-cloud-item">
+  <span class="mono">{{ tag }}</span> <span style="color:var(--muted)">{{ count }}</span>
+</a>
+{% endfor %}
+</div>
+
+<h2 style="font-size:1.1rem; font-weight:400; color:var(--accent); margin:0 0 1rem;">
+  Auto-generated Tags</h2>
+{% for dim, items in auto_tags.items() %}
+{% set meta = dim_meta.get(dim, (dim, dim)) %}
+<div style="margin-bottom:1.75rem">
+  <h3 style="font-size:0.85rem; font-weight:600; text-transform:uppercase;
+             letter-spacing:.08em; color:var(--muted); margin:0 0 0.5rem;">
+    {{ meta[0] }}</h3>
+  <div class="tag-cloud">
+  {% for val, count in items %}
+  <a href="/search?{{ meta[1] }}={{ val | urlencode }}" class="tag-cloud-item">
+    {{ val }} <span style="color:var(--muted)">{{ count }}</span>
+  </a>
+  {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

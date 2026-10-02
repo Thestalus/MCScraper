@@ -1,0 +1,19 @@
+# Data lives in Dropbox (MCScraper-data); output/ is a symlink/junction to it
+output
+output/
+
+# Environments & caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.texpadtmp/
+.DS_Store
+
+# Local Claude Code state
+.claude/settings.local.json
+
+# Private notes
+MCSTORIES_PROPOSAL.md
+old
+local.mk

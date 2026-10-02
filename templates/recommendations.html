@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1.5rem;">
+  <h1 class="page-title" style="margin:0; border:none;">For You</h1>
+  <span style="display:flex; align-items:center; gap:1rem; font-size:0.82rem; color:var(--muted);">
+    Based on {{ liked_count }} likes
+    {% if not semantic %}&nbsp;&middot;&nbsp;
+    <span style="color:var(--accent2)">Install sentence-transformers for better results</span>
+    {% endif %}
+    <a href="/recommendations?shuffle=1"
+       style="background:var(--bg3); border:1px solid var(--border); color:var(--muted);
+              padding:0.25rem 0.7rem; border-radius:4px; text-decoration:none; font-size:0.82rem;
+              cursor:pointer;" title="Show a different random selection from your top matches">
+      &#8635; Shuffle
+    </a>
+  </span>
+</div>
+
+{% if liked_count == 0 %}
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+            padding:2rem; text-align:center; margin-bottom:2rem;">
+  <p style="font-size:1.1rem; margin-bottom:0.75rem;">Like some stories to get personalised recommendations</p>
+  <p style="color:var(--muted); font-size:0.9rem;">
+    Open any story and click &#9829; Like. The more you like, the better the recommendations get.
+  </p>
+  <p style="margin-top:1rem;"><a href="/">Browse stories &rarr;</a></p>
+</div>
+{% endif %}
+
+{% if profile %}
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+            padding:1.25rem; margin-bottom:2rem;">
+  <div style="font-size:0.78rem; color:var(--muted); letter-spacing:0.1em;
+              text-transform:uppercase; margin-bottom:0.75rem;">Your taste profile</div>
+  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:0.88rem;">
+    {% if profile.top_themes %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">Themes</div>
+      {% for t, n in profile.top_themes %}
+      <span class="tag" style="color:#a0c898;">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if profile.top_mc_types %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">MC methods</div>
+      {% for t, n in profile.top_mc_types %}
+      <span class="tag mc-type">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if profile.top_dominance %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">Dominance style</div>
+      {% for t, n in profile.top_dominance %}
+      <span class="tag" style="color:#c8a06a;">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if profile.top_pacing %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">Pacing</div>
+      {% for t, n in profile.top_pacing %}
+      <span class="tag" style="color:#7a9e7a;">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if profile.avg_length %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">Avg length liked</div>
+      <span style="color:var(--text);">{{ "{:,}".format(profile.avg_length) }} words</span>
+    </div>
+    {% endif %}
+    {% if profile.liked_authors %}
+    <div>
+      <div style="color:var(--muted); font-size:0.78rem; margin-bottom:0.3rem;">Liked authors</div>
+      {% for a in profile.liked_authors[:4] %}
+      <a href="/author/{{ a | urlencode }}" class="tag">{{ a }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if not index_ready %}
+<p style="color:var(--accent2); margin-bottom:1rem; font-size:0.9rem;">
+  &#9203; Building similarity index&hellip; refresh in a moment for personalised ranking
+</p>
+{% endif %}
+
+<div class="story-grid" id="recs-grid">
+{% for s, score, reason in recs %}
+<div class="story-card" id="rec-{{ s.id }}">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div class="story-title"><a href="/story/{{ s.id }}">{{ s | dt }}</a></div>
+    <button onclick="dismissRec('{{ s.id }}')"
+            title="Remove from recommendations"
+            style="background:none; border:none; color:var(--muted); cursor:pointer;
+                   font-size:1rem; padding:0 0.2rem; line-height:1; opacity:0.5; flex-shrink:0;"
+            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">&#10005;</button>
+  </div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author }}</a></span>
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} ch</span>{% endif %}
+  </div>
+  {% set at = story_tags(s) %}
+  <div>
+    {% for cat in s.categories[:5] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}<span class="tag mc-type">{{ mc }}</span>{% endfor %}
+    {% for t in visible_tags(at.get("themes") or [], at)[:2] %}<span class="tag" style="color:#a0c898;font-size:0.75rem;">{{ t }}</span>{% endfor %}
+    {% for d in visible_tags(at.get("dominance") or [], at)[:1] %}<span class="tag" style="color:#c8a06a;font-size:0.75rem;">{{ d }}</span>{% endfor %}
+  </div>
+  {% if s.description %}<div class="story-desc">{{ s.description }}</div>{% endif %}
+  {% if reason %}<div style="font-size:0.8rem; color:var(--muted); font-style:italic; margin-top:0.4rem;">because: {{ reason }}</div>{% endif %}
+</div>
+{% else %}
+<p style="color:var(--muted)">No recommendations yet &mdash; like some stories first.</p>
+{% endfor %}
+</div>
+{% if hidden_count %}
+<p style="margin-top:1.5rem; font-size:0.82rem; color:var(--muted); text-align:center;">
+  {{ hidden_count }} stories hidden &middot;
+  <a href="/api/restore-dismissed" onclick="restoreDismissed(event)"
+     style="color:var(--muted);">Restore all</a>
+</p>
+{% endif %}
+<script>
+function dismissRec(id) {
+  fetch('/api/dismiss-rec/' + id, {method:'POST'})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        const el = document.getElementById('rec-' + id);
+        if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s';
+                  setTimeout(() => el.remove(), 200); }
+      }
+    });
+}
+function restoreDismissed(e) {
+  e.preventDefault();
+  fetch('/api/restore-dismissed', {method:'POST'})
+    .then(r => r.json())
+    .then(d => { if (d.ok) location.reload(); });
+}
+</script>
+{% endblock %}

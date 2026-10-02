@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1.5rem;">
+  <h1 class="page-title" style="margin:0;border:none;">&#9733; Liked Stories</h1>
+  <div style="display:flex; gap:1rem; font-size:0.88rem;">
+    <a href="/liked/export?fmt=json">Export JSON</a>
+    <a href="/liked/export?fmt=csv">Export CSV</a>
+    <a href="/liked/export?fmt=txt">Export list</a>
+  </div>
+</div>
+{% if not liked_stories and not liked_authors %}
+<div style="text-align:center; padding:3rem; color:var(--muted);">
+  <p style="font-size:1.2rem; margin-bottom:0.75rem;">No liked stories yet.</p>
+  <p>Open any story and click &#9829; Like.</p>
+  <p style="margin-top:1rem;"><a href="/">Browse stories &rarr;</a></p>
+</div>
+{% else %}
+{% if liked_authors %}
+<div style="margin-bottom:2rem;">
+  <div style="font-size:0.78rem; color:var(--muted); letter-spacing:0.1em;
+              text-transform:uppercase; margin-bottom:0.75rem;">Followed Authors</div>
+  <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+  {% for author in liked_authors %}
+  <span style="background:var(--bg2); border:1px solid var(--border); border-radius:4px;
+               padding:0.3rem 0.75rem; display:inline-flex; align-items:center; gap:0.5rem;">
+    <a href="/author/{{ author | urlencode }}" style="font-size:0.92rem;">{{ author }}</a>
+    <button onclick="unfollowAuthor('{{ author | urlencode }}')"
+            style="background:none;border:none;color:var(--muted);cursor:pointer;
+                   font-size:0.8rem; padding:0;">&#10005;</button>
+  </span>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if liked_stories %}
+<div style="font-size:0.78rem; color:var(--muted); letter-spacing:0.1em;
+            text-transform:uppercase; margin-bottom:0.75rem;">
+  {{ liked_stories|length }} Liked Stories
+</div>
+<div class="story-grid">
+{% for s in liked_stories %}
+<div class="story-card liked-card">
+  <div class="story-title"><a href="/story/{{ s.id }}">{{ s | dt }}</a></div>
+  <div class="story-meta">
+    <span>by <a href="/author/{{ s.author | urlencode }}">{{ s.author }}</a></span>
+    <span>{{ "{:,}".format(s.word_count) }} words</span>
+    {% if (s.chapter_count | default(0)) > 1 %}<span class="chapters-badge">{{ s.chapter_count }} ch</span>{% endif %}
+  </div>
+  {% set at = story_tags(s) %}
+  <div>
+    {% for cat in s.categories[:6] %}<a href="/tag/{{ cat }}" class="tag">{{ cat }}</a>{% endfor %}
+    {% for mc in visible_tags(at.get("mind_control_type") or [], at)[:2] %}<span class="tag mc-type">{{ mc }}</span>{% endfor %}
+  </div>
+  {% if s.description %}<div class="story-desc">{{ s.description }}</div>{% endif %}
+  <div style="margin-top:0.4rem;">
+    <button onclick="removeLike('{{ s.id }}', this)"
+            style="font-size:0.78rem; color:var(--muted); background:none; border:none;
+                   cursor:pointer; padding:0;">&#10005; Remove</button>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endif %}
+<script>
+function removeLike(id, btn) {
+  fetch('/api/like/' + id, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status:'none'})
+  }).then(r=>r.json()).then(d=>{ if(d.ok) btn.closest('.story-card').remove(); });
+}
+function unfollowAuthor(author) {
+  fetch('/api/like-author/' + author, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status:'none'})
+  }).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">&#9998; Generate a Story</h1>
+
+<!-- LLM Connection Status -->
+<div id="llm-status" style="margin-bottom:1.5rem; padding:0.75rem 1rem;
+     background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+     font-size:0.88rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+  <span id="status-dot" style="width:10px;height:10px;border-radius:50%;
+        background:#ccc; display:inline-block; flex-shrink:0;"></span>
+  <span id="status-text" style="color:var(--muted);">Checking for local LLM...</span>
+  <span style="flex:1"></span>
+  <select id="endpoint-select" style="background:var(--bg3); border:1px solid var(--border);
+          color:var(--text); padding:0.3rem 0.6rem; border-radius:4px; font-family:inherit;
+          font-size:0.82rem;" onchange="checkConnection()">
+    <option value="lmstudio">LM Studio (localhost:1234)</option>
+    <option value="ollama">Ollama (localhost:11434)</option>
+    <option value="custom">Custom endpoint</option>
+  </select>
+  <input id="custom-url" type="text" placeholder="http://localhost:8080/v1"
+         style="display:none; background:var(--bg3); border:1px solid var(--border);
+                color:var(--text); padding:0.3rem 0.6rem; border-radius:4px;
+                font-family:inherit; font-size:0.82rem; width:220px;">
+  <input id="api-key" type="password" placeholder="API key (optional)"
+         style="background:var(--bg3); border:1px solid var(--border);
+                color:var(--text); padding:0.3rem 0.6rem; border-radius:4px;
+                font-family:inherit; font-size:0.82rem; width:160px;">
+  <select id="model-select" style="background:var(--bg3); border:1px solid var(--border);
+          color:var(--text); padding:0.3rem 0.6rem; border-radius:4px; font-family:inherit;
+          font-size:0.82rem; min-width:180px;">
+    <option value="auto">Auto-detect model</option>
+  </select>
+</div>
+
+<!-- Two-column layout: controls left, output right -->
+<div style="display:grid; grid-template-columns:340px 1fr; gap:2rem; align-items:start;">
+
+<!-- Left: controls -->
+<div>
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+              padding:1.25rem;">
+
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.78rem; color:var(--muted); letter-spacing:0.08em;
+                    text-transform:uppercase; display:block; margin-bottom:0.4rem;">
+        What do you want?
+      </label>
+      <textarea id="request-text" rows="4"
+                placeholder="e.g. A woman visits her new therapist who turns out to have unusual methods of relaxation..."
+                style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                       color:var(--text); padding:0.5rem 0.75rem; border-radius:4px;
+                       font-family:inherit; font-size:0.95rem; resize:vertical;
+                       line-height:1.5;"></textarea>
+    </div>
+
+    <div style="margin-bottom:0.8rem;">
+      <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                    letter-spacing:0.08em; display:block; margin-bottom:0.4rem;">
+        Mode
+      </label>
+      <div style="display:flex; gap:0.5rem;">
+        <button class="mode-btn active" data-mode="inspired" onclick="setMode(this)"
+                style="flex:1; padding:0.4rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.82rem;">
+          &#10024; Inspired by
+        </button>
+        <button class="mode-btn" data-mode="remix" onclick="setMode(this)"
+                style="flex:1; padding:0.4rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.82rem;">
+          &#8635; Remix
+        </button>
+        <button class="mode-btn" data-mode="continue" onclick="setMode(this)"
+                style="flex:1; padding:0.4rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit; font-size:0.82rem;">
+          &#9654; Continue
+        </button>
+      </div>
+    </div>
+
+    <!-- Tag filters -->
+    {% for label, name, options in [
+      ("MC method", "mc_type", mc_types),
+      ("Setting", "setting", settings),
+      ("Tone", "tone", tones),
+      ("Dominance", "dominance", dominances),
+      ("Pacing", "pacing", pacings),
+      ("Victim awareness", "awareness", awareness_opts),
+    ] %}
+    <div style="margin-bottom:0.7rem;">
+      <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                    letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">{{ label }}</label>
+      <select name="{{ name }}" id="tag-{{ name }}"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.35rem 0.6rem; border-radius:4px;
+                     font-family:inherit; font-size:0.88rem;">
+        <option value="">Any</option>
+        {% for o in options %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+
+    <!-- Theme multi-select -->
+    <div style="margin-bottom:0.7rem;">
+      <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                    letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">
+        Themes (pick up to 3)
+      </label>
+      <div id="theme-pills" style="display:flex; flex-wrap:wrap; gap:0.3rem;">
+        {% for t in themes[:16] %}
+        <button onclick="toggleTheme(this)" data-theme="{{ t }}"
+                style="background:var(--bg3); border:1px solid var(--border);
+                       color:var(--muted); padding:0.15rem 0.5rem; border-radius:3px;
+                       font-size:0.75rem; cursor:pointer; font-family:inherit;">{{ t }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Length -->
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                    letter-spacing:0.08em; display:block; margin-bottom:0.3rem;">Length</label>
+      <select id="tag-length"
+              style="width:100%; background:var(--bg3); border:1px solid var(--border);
+                     color:var(--text); padding:0.35rem 0.6rem; border-radius:4px;
+                     font-family:inherit; font-size:0.88rem;">
+        <option value="short story">Short story (2k&ndash;6k words)</option>
+        <option value="flash">Flash (&lt;1k words)</option>
+        <option value="novelette">Novelette (8k&ndash;15k words)</option>
+      </select>
+    </div>
+
+    <!-- Temperature -->
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                    letter-spacing:0.08em; display:flex; justify-content:space-between;
+                    margin-bottom:0.3rem;">
+        <span>Creativity</span>
+        <span id="temp-label" style="font-family:monospace;">0.85</span>
+      </label>
+      <input type="range" id="temperature" min="0.5" max="1.3" step="0.05" value="0.85"
+             style="width:100%;" oninput="document.getElementById('temp-label').textContent=this.value">
+      <div style="display:flex; justify-content:space-between; font-size:0.72rem;
+                  color:var(--muted); margin-top:0.2rem;">
+        <span>Focused</span><span>Balanced</span><span>Wild</span>
+      </div>
+    </div>
+
+    <button id="generate-btn" onclick="generate()"
+            style="width:100%; background:#3d2b1a; color:#e8c99a; border:none;
+                   padding:0.65rem; border-radius:6px; font-family:inherit; font-size:1rem;
+                   cursor:pointer; font-weight:500; letter-spacing:0.02em;">
+      &#9998; Generate Story
+    </button>
+    <button id="stop-btn" onclick="stopGeneration()" style="display:none; width:100%;
+            background:#8b2a2a; color:#fff; border:none; padding:0.5rem; border-radius:6px;
+            font-family:inherit; font-size:0.9rem; cursor:pointer; margin-top:0.4rem;">
+      &#9632; Stop
+    </button>
+  </div>
+
+  <!-- Retrieved examples -->
+  <div id="examples-panel" style="margin-top:1rem; display:none;">
+    <div style="font-size:0.78rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:0.08em; margin-bottom:0.5rem;">Retrieved examples</div>
+    <div id="examples-list"></div>
+  </div>
+</div>
+
+<!-- Right: output -->
+<div>
+  <div id="output-panel" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center;
+                margin-bottom:0.75rem;">
+      <div id="output-title" style="font-size:1.1rem; font-weight:500;
+                                    color:var(--accent2);"></div>
+      <div style="display:flex; gap:0.75rem; font-size:0.82rem;">
+        <button onclick="copyOutput()"
+                style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                       padding:0.3rem 0.7rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit;">&#128203; Copy</button>
+        <button onclick="saveOutput()"
+                style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                       padding:0.3rem 0.7rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit;">&#128190; Save .txt</button>
+        <button onclick="regenerate()"
+                style="background:var(--bg2); border:1px solid var(--border); color:var(--text);
+                       padding:0.3rem 0.7rem; border-radius:4px; cursor:pointer;
+                       font-family:inherit;">&#8635; Regenerate</button>
+      </div>
+    </div>
+    <div id="output-meta" style="font-size:0.82rem; color:var(--muted);
+                                 margin-bottom:1rem;"></div>
+    <div id="output-text"
+         style="font-family:'Crimson Pro',Georgia,serif; font-size:1.1rem;
+                line-height:1.95; max-width:780px; white-space:pre-wrap;
+                border-top:1px solid var(--border); padding-top:1.25rem;"></div>
+    <div id="word-count" style="font-size:0.78rem; color:var(--muted);
+                                margin-top:1rem; text-align:right;"></div>
+  </div>
+  <div id="placeholder" style="color:var(--muted); padding:4rem 2rem; text-align:center;
+                                font-style:italic; font-size:1.05rem;">
+    Describe a story and click Generate &rarr;
+  </div>
+  <div id="error-box" style="display:none; background:#f4e8e8; border:1px solid #8b2a2a;
+       border-radius:6px; padding:1rem; color:#5a1a1a; font-size:0.9rem;
+       margin-top:1rem;"></div>
+</div>
+</div>
+
+<style>
+.mode-btn { background:var(--bg3); border:1px solid var(--border); color:var(--muted); }
+.mode-btn.active { background:#3d2b1a; border-color:#3d2b1a; color:#e8c99a; }
+#request-text, #custom-url, #api-key, #model-select, #endpoint-select,
+select[name], #tag-length, #tag-mc_type, #tag-setting, #tag-tone,
+#tag-dominance, #tag-pacing {
+  color: var(--text) !important;
+}
+</style>
+
+<script>
+let currentMode = 'inspired';
+let controller  = null;
+let lastRequest = null;
+
+// ── Connection ──
+const ENDPOINTS = {
+  lmstudio: 'http://localhost:1234/v1',
+  ollama:   'http://localhost:11434/v1',
+};
+
+document.getElementById('endpoint-select').addEventListener('change', function() {
+  document.getElementById('custom-url').style.display =
+    this.value === 'custom' ? 'inline-block' : 'none';
+  checkConnection();
+});
+
+async function checkConnection() {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  dot.style.background = '#f0a030';
+  text.textContent = 'Connecting...';
+
+  const ep  = document.getElementById('endpoint-select').value;
+  const url = ep === 'custom'
+    ? document.getElementById('custom-url').value || 'http://localhost:8080/v1'
+    : ENDPOINTS[ep] || ENDPOINTS.lmstudio;
+  const key = document.getElementById('api-key').value || 'none';
+
+  try {
+    const r = await fetch('/api/llm/models', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url, key})
+    });
+    const d = await r.json();
+    if (d.models && d.models.length > 0) {
+      dot.style.background  = '#4a8a4a';
+      text.textContent = `Connected \u2014 ${d.models.length} model(s) available`;
+      const sel = document.getElementById('model-select');
+      sel.innerHTML = d.models.map(m =>
+        `<option value="${m}">${m}</option>`).join('');
+    } else {
+      dot.style.background = '#8b2a2a';
+      text.textContent = 'No models found \u2014 is LM Studio running?';
+    }
+  } catch(e) {
+    dot.style.background = '#8b2a2a';
+    text.textContent = 'Could not connect \u2014 start LM Studio or Ollama first';
+  }
+}
+
+// ── Mode ──
+function setMode(btn) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMode = btn.dataset.mode;
+}
+
+// ── Theme pills ──
+function toggleTheme(btn) {
+  const active = document.querySelectorAll('#theme-pills button.active');
+  if (!btn.classList.contains('active') && active.length >= 3) return;
+  btn.classList.toggle('active');
+  btn.style.background = btn.classList.contains('active') ? '#e8f0e8' : 'var(--bg3)';
+  btn.style.borderColor = btn.classList.contains('active') ? '#4a7a4a' : 'var(--border)';
+  btn.style.color = btn.classList.contains('active') ? '#2a5a2a' : 'var(--muted)';
+}
+
+function getSelectedThemes() {
+  return Array.from(document.querySelectorAll('#theme-pills button.active'))
+    .map(b => b.dataset.theme);
+}
+
+// ── Generate ──
+async function generate() {
+  const requestText = document.getElementById('request-text').value.trim();
+  if (!requestText && currentMode !== 'continue') {
+    alert('Please describe what you want to generate.');
+    return;
+  }
+
+  const ep  = document.getElementById('endpoint-select').value;
+  const url = ep === 'custom'
+    ? document.getElementById('custom-url').value || 'http://localhost:8080/v1'
+    : ENDPOINTS[ep] || ENDPOINTS.lmstudio;
+  const key   = document.getElementById('api-key').value || 'none';
+  const model = document.getElementById('model-select').value || 'auto';
+  const temp  = parseFloat(document.getElementById('temperature').value);
+  const length = document.getElementById('tag-length').value;
+
+  const tags = {
+    mc_type:   document.getElementById('tag-mc_type').value,
+    setting:   document.getElementById('tag-setting').value,
+    tone:      document.getElementById('tag-tone').value,
+    dominance: document.getElementById('tag-dominance').value,
+    pacing:    document.getElementById('tag-pacing').value,
+    themes:    getSelectedThemes(),
+    length:    length,
+  };
+
+  lastRequest = {requestText, url, key, model, temp, tags, mode: currentMode};
+
+  document.getElementById('generate-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display     = 'block';
+  document.getElementById('placeholder').style.display  = 'none';
+  document.getElementById('error-box').style.display    = 'none';
+  document.getElementById('output-panel').style.display = 'block';
+  document.getElementById('output-title').textContent   = 'Retrieving examples...';
+  document.getElementById('output-text').textContent    = '';
+  document.getElementById('output-meta').textContent    = '';
+  document.getElementById('word-count').textContent     = '';
+
+  controller = new AbortController();
+
+  try {
+    // Step 1: retrieve similar stories (RAG)
+    const retrieveRes = await fetch('/api/generate/retrieve', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query: requestText, tags})
+    });
+    const retrieved = await retrieveRes.json();
+    showExamples(retrieved.examples || []);
+
+    document.getElementById('output-title').textContent = 'Generating...';
+    document.getElementById('output-meta').textContent  =
+      `Model: ${model} \u00b7 Temp: ${temp} \u00b7 Mode: ${currentMode}`;
+
+    // Step 2: stream generation
+    const genRes = await fetch('/api/generate/stream', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      signal: controller.signal,
+      body: JSON.stringify({
+        request_text: requestText,
+        examples:     retrieved.examples || [],
+        tags, mode: currentMode, url, key, model, temperature: temp,
+        max_tokens: {{ max_tokens }}
+      })
+    });
+
+    if (!genRes.ok) {
+      const err = await genRes.json();
+      throw new Error(err.error || 'Generation failed');
+    }
+
+    const reader = genRes.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    const outputEl = document.getElementById('output-text');
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, {stream: true});
+      fullText += chunk;
+      outputEl.textContent = fullText;
+      const wc = fullText.split(' ').filter(function(w){return w.length>0;}).length;
+      document.getElementById('word-count').textContent = `${wc.toLocaleString()} words`;
+    }
+
+    document.getElementById('output-title').textContent = 'Generated Story';
+
+  } catch(e) {
+    if (e.name !== 'AbortError') {
+      document.getElementById('error-box').style.display = 'block';
+      document.getElementById('error-box').textContent   = `Error: ${e.message}`;
+      document.getElementById('output-panel').style.display = 'none';
+      document.getElementById('placeholder').style.display  = 'block';
+    }
+  } finally {
+    document.getElementById('generate-btn').style.display = 'block';
+    document.getElementById('stop-btn').style.display     = 'none';
+  }
+}
+
+function stopGeneration() {
+  if (controller) { controller.abort(); controller = null; }
+}
+
+function regenerate() {
+  if (lastRequest) generate();
+}
+
+function showExamples(examples) {
+  const panel = document.getElementById('examples-panel');
+  const list  = document.getElementById('examples-list');
+  if (!examples.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  list.innerHTML = examples.map(e =>
+    `<div style="font-size:0.82rem; padding:0.4rem 0; border-bottom:1px solid var(--border);">
+      <a href="/story/${e.id}" target="_blank" style="font-weight:500;">${e.title||e.id}</a>
+      <span style="color:var(--muted); margin-left:0.5rem;">${e.author||''}</span>
+      <span style="color:var(--muted); margin-left:0.5rem; float:right;">${(e.score*100).toFixed(0)}% match</span>
+    </div>`
+  ).join('');
+}
+
+function copyOutput() {
+  navigator.clipboard.writeText(document.getElementById('output-text').textContent);
+}
+
+function saveOutput() {
+  const text = document.getElementById('output-text').textContent;
+  const blob = new Blob([text], {type:'text/plain'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'generated_story.txt';
+  a.click();
+}
+
+// Check connection on load
+window.addEventListener('load', checkConnection);
+</script>
+{% endblock %}
