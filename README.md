@@ -8,14 +8,9 @@ The browser runs locally at **http://127.0.0.1:5003**.
 
 ## Repository layout
 
-Code and data are kept separate:
+Code and data are kept separate. The repo holds only code; everything the scripts produce (story index, databases, caches, embeddings, training files, preferences) goes in `output/`, which is ignored by git.
 
-| What | Where | Backed up by |
-|------|-------|--------------|
-| Code (this repo) | `~/Code/MCScraper` | git / GitHub |
-| Data (indexes, databases, caches, training files, preferences) | `Dropbox/MCScraper/data` | Dropbox |
-
-`output/` in the repo is a **link** to the Dropbox data folder and is ignored by git. All scripts read and write `./output/...`, so they work unchanged on any machine where that link exists.
+`output/` can be an ordinary folder, or a link to a folder somewhere else — for example a Dropbox or other synced folder, so the multi-gigabyte data is backed up without going into git. All scripts read and write `./output/...`, so either way works unchanged.
 
 ```
 MCScraper/
@@ -33,42 +28,61 @@ MCScraper/
 ├── train.py, train_chat.py      LLM fine-tuning data prep / training
 ├── tests.py                     pytest suite
 ├── Makefile                     All common commands (`make help`)
-└── output/  →  Dropbox/MCScraper/data   (not in git)
+└── output/                      Data folder or link to one (not in git)
 ```
 
 ---
 
 ## Setup
 
-### Mac
+Requires **Python 3** (developed and tested on 3.13) and git. Developed on macOS; Linux and Windows are supported via the instructions below.
+
+### 1. Clone
 
 ```bash
-git clone https://github.com/Thestalus/MCScraper.git ~/Code/MCScraper
-cd ~/Code/MCScraper
-ln -s ~/Library/CloudStorage/Dropbox/MCScraper/data output
+git clone https://github.com/Thestalus/MCScraper.git
+cd MCScraper
+```
+
+### 2. Choose where the data lives
+
+Either create a plain folder (`mkdir output`), or link `output` to an existing data folder:
+
+| OS | Link `output` to an existing folder |
+|----|-------------------------------------|
+| macOS / Linux | `ln -s /path/to/data output` |
+| Windows (Command Prompt) | `mklink /J output "C:\path\to\data"` |
+
+### 3. Install dependencies
+
+**macOS / Linux** — the Makefile handles the virtual environment:
+
+```bash
 make install            # create .venv + core dependencies
-make install-semantic   # sentence-transformers etc. (recommendations, semantic tagging)
+make install-semantic   # sentence-transformers (recommendations, semantic tagging)
 make check              # verify dependencies and that scripts parse
 ```
 
-To reproduce the exact package versions of the main Mac environment instead:
-`.venv/bin/python3 -m pip install -r requirements-lock.txt`
+or install everything in `requirements.txt` at once:
 
-### Windows (e.g. arc tagging on the GPU machine)
+```bash
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+```
+
+**Windows:**
 
 ```bat
-cd %USERPROFILE%
-git clone https://github.com/Thestalus/MCScraper.git
-cd MCScraper
-mklink /J output "%USERPROFILE%\Dropbox\MCScraper\data"
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-The Makefile's `PROJECT_DIR` is a Mac path — on Windows run scripts directly, e.g.
-`.venv\Scripts\python narrative_arc.py --limit 2000`.
+The Makefile uses Unix paths, so on Windows run the scripts directly instead of through `make` — e.g. `.venv\Scripts\python browser.py --port 5003`. The Makefile shows the exact command and arguments behind each target.
 
-> Don't run jobs that write `stories_index.json` on both machines at the same time — Dropbox will create a conflicted copy.
+Optional extras:
+- **OCR ingestion** needs the Tesseract binary (`brew install tesseract`, your Linux package manager, or the Windows installer).
+- **LLM fine-tuning** needs `torch`, `transformers`, `peft`, `bitsandbytes` and `accelerate`, installed to match your GPU/CUDA setup — see [TRAINING_GUIDE.md](TRAINING_GUIDE.md).
+- `requirements-lock.txt` pins the exact package versions of a known-good macOS environment.
 
 ---
 
@@ -82,14 +96,9 @@ make test          # run the test suite
 make help          # full command reference
 ```
 
-Keeping machines in sync:
+### Using more than one machine
 
-```bash
-git add -A && git commit -m "…" && git push   # after changing code
-git pull                                        # before running on another machine
-```
-
-Data needs no git step — it syncs through Dropbox.
+Code syncs through git (`git push` after changes, `git pull` before running elsewhere). If `output` links to a synced folder on each machine, the data follows automatically — but don't run jobs that write `stories_index.json` on two machines at the same time, or the sync service will create a conflicted copy.
 
 ---
 
@@ -118,4 +127,6 @@ After anything changes `stories_index.json`, run `make post-update` so the deriv
 | [GUIDE.md](GUIDE.md) | Using the browser, updating, Wayback recovery, ingestion, tagging, maintenance |
 | [BROWSER_GUIDE.md](BROWSER_GUIDE.md) | Browser architecture: startup, AppState, routes, services, making changes |
 | [CLASSIFIER_GUIDE.md](CLASSIFIER_GUIDE.md) | Tag schema, tagging layers, trust tiers, audits |
-| [TRAINING_GUIDE.md](TRAINING_GUIDE.md) | Fine-tuning pipeline, hardware, Windows/LM Studio setup |
+| [TRAINING_GUIDE.md](TRAINING_GUIDE.md) | Fine-tuning pipeline, model choices, LM Studio setup |
+
+> **Note:** TRAINING_GUIDE.md is written around specific hardware — an RTX 3070 Ti (8 GB VRAM) on Windows, an Apple M4 Mac with 16 GB, and rented A100s for larger runs. Model sizes, context lengths, timings and costs in it assume that hardware; adjust them for yours.
