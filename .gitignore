@@ -1,4 +1,4 @@
-# Data lives in Dropbox (MCScraper-data); output/ is a symlink/junction to it
+# Data lives in Dropbox (MCScraper/data); output is a symlink/junction to it
 output
 output/
 

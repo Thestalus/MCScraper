@@ -13,7 +13,7 @@ Code and data are kept separate:
 | What | Where | Backed up by |
 |------|-------|--------------|
 | Code (this repo) | `~/Code/MCScraper` | git / GitHub |
-| Data (indexes, databases, caches, training files, preferences) | `Dropbox/MCScraper-data` | Dropbox |
+| Data (indexes, databases, caches, training files, preferences) | `Dropbox/MCScraper/data` | Dropbox |
 
 `output/` in the repo is a **link** to the Dropbox data folder and is ignored by git. All scripts read and write `./output/...`, so they work unchanged on any machine where that link exists.
 
@@ -33,7 +33,7 @@ MCScraper/
 ├── train.py, train_chat.py      LLM fine-tuning data prep / training
 ├── tests.py                     pytest suite
 ├── Makefile                     All common commands (`make help`)
-└── output/  →  Dropbox/MCScraper-data   (not in git)
+└── output/  →  Dropbox/MCScraper/data   (not in git)
 ```
 
 ---
@@ -45,7 +45,7 @@ MCScraper/
 ```bash
 git clone https://github.com/Thestalus/MCScraper.git ~/Code/MCScraper
 cd ~/Code/MCScraper
-ln -s ~/Library/CloudStorage/Dropbox/MCScraper-data output
+ln -s ~/Library/CloudStorage/Dropbox/MCScraper/data output
 make install            # create .venv + core dependencies
 make install-semantic   # sentence-transformers etc. (recommendations, semantic tagging)
 make check              # verify dependencies and that scripts parse
@@ -60,7 +60,7 @@ To reproduce the exact package versions of the main Mac environment instead:
 cd %USERPROFILE%
 git clone https://github.com/Thestalus/MCScraper.git
 cd MCScraper
-mklink /J output "%USERPROFILE%\Dropbox\MCScraper-data"
+mklink /J output "%USERPROFILE%\Dropbox\MCScraper\data"
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
