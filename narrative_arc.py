@@ -40,6 +40,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import signal
 import time
 import re
 import argparse
@@ -390,9 +391,25 @@ def run(args):
     by_id = {s["id"]: s for s in stories}
 
     ok = err = skipped = 0
-    checkpoint_every = 5
+    # Each checkpoint rewrites the whole (>1 GB) index, which the sync folder then
+    # re-uploads, so checkpoint sparingly. Ctrl+C saves before exiting instead.
+    checkpoint_every = args.checkpoint_every
+
+    stop_requested = False
+
+    def _request_stop(signum, frame):
+        nonlocal stop_requested
+        if stop_requested:
+            raise KeyboardInterrupt  # second Ctrl+C: quit immediately
+        stop_requested = True
+        log.warning("Ctrl+C — finishing this story, then saving and exiting "
+                    "(press Ctrl+C again to quit without saving)")
+
+    signal.signal(signal.SIGINT, _request_stop)
 
     for i, story in enumerate(to_process, 1):
+        if stop_requested:
+            break
         sid   = story["id"]
         title = story.get("title") or sid
         wc    = story.get("word_count", 0)
@@ -519,7 +536,8 @@ Workflow:
 
 Speed: ~3-6 seconds per story depending on model and story length.
 For 17k stories: ~15-30 hours. Run overnight in batches.
-Safe to interrupt — checkpoints every 50 stories.
+Checkpoints every 50 stories (--checkpoint-every). Ctrl+C finishes the
+current story and saves before exiting.
 Resume interrupted run:
   python narrative_arc.py   (skips already-tagged stories automatically)
         """
@@ -539,6 +557,8 @@ Resume interrupted run:
                    help="Print arc tag statistics and exit")
     p.add_argument("--index",        default=INDEX_PATH,
                    help="Path to stories_index.json")
+    p.add_argument("--checkpoint-every", type=int, default=50,
+                   help="Save the index every N stories (default: 50); each save rewrites the whole index")
     p.add_argument("--delay",        type=float, default=DELAY,
                    help=f"Seconds between requests (default: {DELAY})")
 

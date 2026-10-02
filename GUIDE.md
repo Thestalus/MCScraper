@@ -703,7 +703,7 @@ VRAM; the model sits there independently and system RAM stays free.
 - Windows: **32768** (fits comfortably in 8GB VRAM for arc tagging)
 
 **Arc tagging** syncs automatically via Dropbox — run `narrative_arc.py` on Windows,
-results appear on Mac when the checkpoint saves (every 5 stories).
+results appear on Mac when the checkpoint saves (every 50 stories, or when you stop it with Ctrl+C).
 
 ---
 

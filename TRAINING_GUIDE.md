@@ -782,7 +782,7 @@ python narrative_arc.py --limit 2000
 make arc-stats
 ```
 
-The index saves every 5 stories — safe to Ctrl+C and resume anytime. Results
+The index saves every 50 stories, and Ctrl+C finishes the current story and saves before exiting — resume anytime. Results
 sync back to the Mac via Dropbox automatically.
 
 **Mac fallback:** If you must run on Mac, set LM Studio context to 16384 and
