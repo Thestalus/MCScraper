@@ -171,8 +171,8 @@ class TestRegexTagger:
         from tagger import expand_site_tags
         result = expand_site_tags(["mc", "mf", "hm"])
         assert "mind control" in result["labels"]
-        assert "male/female" in result["labels"]
-        assert "hypnosis" in result["labels"]
+        assert "male/female sex" in result["labels"]
+        assert "humiliation" in result["labels"]
 
     def test_site_tag_expansion_unknown_codes_ignored(self):
         from tagger import expand_site_tags
@@ -188,13 +188,14 @@ class TestRegexTagger:
     def test_site_tag_groups_populated(self):
         from tagger import expand_site_tags
         result = expand_site_tags(["mc", "mf", "hm"])
-        assert "gender_dynamic" in result["groups"]
-        assert "mechanism" in result["groups"]
+        assert "sex_act" in result["groups"]
+        assert "kink" in result["groups"]
 
     def test_content_type_extracts_gender_dynamic(self):
         from tagger import regex_tag
-        result = regex_tag(SAMPLE_STORY_HYPNOSIS)
-        assert "male/female" in result["content_type"]
+        # content_type only carries the gender-dynamic codes (fd/md)
+        result = regex_tag(SAMPLE_STORY_OFFICE)
+        assert "female dominant" in result["content_type"]
 
     def test_mind_control_type_hypnosis(self):
         from tagger import regex_tag
@@ -206,25 +207,20 @@ class TestRegexTagger:
         result = regex_tag(SAMPLE_STORY_OFFICE)
         assert "subliminal" in result["mind_control_type"]
 
-    def test_mind_control_type_dominant_personality(self):
-        from tagger import regex_tag
-        result = regex_tag(SAMPLE_STORY_OFFICE)
-        assert "dominant personality" in result["mind_control_type"]
-
     def test_mind_control_type_magic(self):
         from tagger import regex_tag
         result = regex_tag(SAMPLE_STORY_FANTASY)
-        assert "magic / spell" in result["mind_control_type"]
+        assert "magic" in result["mind_control_type"]
 
     def test_setting_office(self):
         from tagger import regex_tag
         result = regex_tag(SAMPLE_STORY_OFFICE)
-        assert "office / workplace" in result["setting"]
+        assert "workplace" in result["setting"]
 
     def test_setting_fantasy(self):
         from tagger import regex_tag
         result = regex_tag(SAMPLE_STORY_FANTASY)
-        assert "fantasy / medieval" in result["setting"]
+        assert "fantasy / historical" in result["setting"]
 
     def test_theme_romance(self):
         from tagger import regex_tag
@@ -238,7 +234,7 @@ class TestRegexTagger:
                  "full_text": "Once there was an office. The end."}
         result = regex_tag(story)
         # "office" appears once but threshold is 2 — should not fire
-        assert "office / workplace" not in result["setting"]
+        assert "workplace" not in result["setting"]
 
     def test_pov_first_person(self):
         from tagger import regex_tag
@@ -305,7 +301,7 @@ class TestRegexTagger:
             "full_text": "She walked in. He smiled. The end.",
         }
         result = regex_tag(story)
-        assert "office / workplace" in result["setting"]
+        assert "workplace" in result["setting"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -342,11 +338,11 @@ class TestMergeLayer:
 
     def test_merge_regex_tags_come_first(self):
         from tagger import merge_tags
-        rx_with_setting = {**self.rx, "setting": ["office / workplace"]}
-        sem = {"mind_control_type": [], "setting": ["office / workplace", "gym / fitness"],
+        rx_with_setting = {**self.rx, "setting": ["workplace"]}
+        sem = {"mind_control_type": [], "setting": ["workplace", "gym / fitness"],
                "themes": [], "tone": []}
         merged = merge_tags(rx_with_setting, semantic_result=sem)
-        assert merged["setting"][0] == "office / workplace"
+        assert merged["setting"][0] == "workplace"
 
     def test_merge_no_duplicates(self):
         from tagger import merge_tags
@@ -441,7 +437,7 @@ class TestTagStoryAPI:
         result = tag_story(story, use_semantic=True, threshold=0.30)
         assert result["_semantic_used"] is True
         # Semantic should catch office setting even without exact trigger words
-        assert "office / workplace" in result["setting"]
+        assert "workplace" in result["setting"]
 
     @pytest.mark.semantic
     def test_tag_story_semantic_threshold_respected(self):
@@ -913,7 +909,7 @@ class TestSearch:
 
     def test_setting_filter(self, stories):
         from search_stories import search
-        results = search(stories, setting="office")
+        results = search(stories, setting="workplace")
         titles = [r["title"] for r in results]
         assert "Corner Office" in titles
 

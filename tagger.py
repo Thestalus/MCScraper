@@ -785,7 +785,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "messages, brainwashing, conditioning, or gradual psychological "
             "reprogramming that the victim does not consciously notice"
         ),
-        "alien / psychic": (
+        "psionic": (
             "a story involving alien mind control, psychic domination, telepathy, "
             "pheromone influence, hive-mind absorption, or parasitic possession"
         ),
@@ -801,7 +801,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story set in an office, corporation, workplace, or professional "
             "environment — with bosses, coworkers, meetings, cubicles, or a career context"
         ),
-        "school / university": (
+        "school / college": (
             "a story set in a school, university, college, or academic environment "
             "involving students, professors, classrooms, dormitories, or campus life"
         ),
@@ -809,7 +809,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story set primarily in a home, house, or domestic environment — "
             "involving housemates, spouses, family members, or everyday home life"
         ),
-        "fantasy / medieval": (
+        "fantasy / historical": (
             "a story set in a fantasy world with magic, wizards, castles, dragons, "
             "medieval settings, enchanted kingdoms, or mythological creatures"
         ),
@@ -821,7 +821,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story set in a world with supernatural elements — vampires, werewolves, "
             "demons, ghosts, occult forces, or creatures of the night"
         ),
-        "gym / fitness": (
+        "gym / sports": (
             "a story set in a gym, fitness studio, sports facility, or athletic "
             "environment involving trainers, athletes, or physical exercise"
         ),
@@ -833,7 +833,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story that takes place online, in a virtual environment, chat room, "
             "VR world, or where the internet or digital technology is the primary setting"
         ),
-        "therapy / medical": (
+        "medical": (
             "a story set in a therapy office, medical clinic, hospital, or healthcare "
             "environment involving patients, doctors, nurses, or therapists"
         ),
@@ -845,7 +845,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "over time, with resistance, reluctance, or incremental change rather than "
             "an immediate takeover"
         ),
-        "corruption / change": (
+        "corruption arc": (
             "a story about the gradual corruption, transformation, or personality change "
             "of a character — where who they are fundamentally shifts over the course "
             "of the story"
@@ -854,7 +854,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story with strong romantic elements — love, emotional connection, "
             "tenderness, longing, or a relationship that goes beyond purely physical"
         ),
-        "revenge / power play": (
+        "revenge": (
             "a story driven by revenge, power struggle, dominance games, or deliberate "
             "humiliation — where control is used as a weapon or payback"
         ),
@@ -924,7 +924,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
 
     "dominance": {
-        "gentle dominance": (
+        "gentle": (
             "a story where the dominant figure is caring, tender, protective, and "
             "nurturing — control expressed through love and patience rather than force"
         ),
@@ -932,7 +932,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a story where the dominant figure is strict and demanding but not cruel — "
             "clear rules, discipline, and high expectations but without sadism"
         ),
-        "cruel / sadistic": (
+        "sadistic": (
             "a story where the dominant figure is cruel, sadistic, brutal, or merciless — "
             "enjoying the subject's pain, humiliation, or suffering"
         ),
@@ -951,7 +951,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
 
     "pacing": {
-        "slow build": (
+        "leisurely": (
             "a story where the mind control or relationship develops very slowly over "
             "a long period — weeks, months, gradual incremental change"
         ),
@@ -976,7 +976,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "utterly powerless to stop it. Their mind is intact but their body or will "
             "acts against them."
         ),
-        "aware but accepting": (
+        "accepting": (
             "the subject knows what is happening and has stopped fighting it — they "
             "have surrendered, given in, or chosen to accept the control. Not quite "
             "willing but no longer resisting."
@@ -986,7 +986,7 @@ SEMANTIC_TAG_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "they feel strange urges, foggy thinking, or behaviour that puzzles them, "
             "but do not understand the cause."
         ),
-        "unaware / oblivious": (
+        "oblivious": (
             "the subject has no idea they are being controlled — they believe their "
             "thoughts and actions are entirely their own. The control is invisible to "
             "them."
