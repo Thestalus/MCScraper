@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
 import logging
 from pathlib import Path
@@ -49,6 +50,7 @@ class EmbeddingEngine:
         self._embeddings: dict[str, list[float]] = {}   # story_id -> vector
         self._loaded     = False
         self.semantic    = False
+        self._build_lock = threading.Lock()
 
     def _try_load_model(self):
         try:
@@ -89,8 +91,14 @@ class EmbeddingEngine:
         If cache_path is given, embeddings are loaded from disk and only
         new/missing stories are re-encoded, then the cache is updated.
         """
-        if self._loaded:
-            return
+        # The startup thread and a request (e.g. /recommendations) can both call
+        # this; loading the model concurrently fails, so the second caller waits.
+        with self._build_lock:
+            if self._loaded:
+                return
+            self._build_index(stories, cache_path)
+
+    def _build_index(self, stories: list[dict], cache_path: "Path | None"):
         self._try_load_model()
         valid = [s for s in stories if not s.get("fetch_error") and s.get("_has_text", s.get("full_text"))]
         log.info(f"Building recommendation index for {len(valid)} stories...")
