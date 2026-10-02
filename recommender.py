@@ -16,6 +16,7 @@ Preferences are stored in output/preferences.json and persist across sessions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import threading
@@ -261,6 +262,17 @@ class PreferenceStore:
                 self.data.setdefault("want_to_read", [])
             except Exception as e:
                 log.warning(f"Could not load preferences: {e}")
+
+    # Keys that personalised recommendations depend on. Reading history and
+    # want-to-read also live in preferences.json but don't change recs, so they
+    # must not invalidate the precalculated cache.
+    TASTE_KEYS = ("liked_stories", "disliked_stories", "liked_authors",
+                  "disliked_authors", "hidden_recs")
+
+    def taste_signature(self) -> str:
+        """Hash of the preference lists that affect recommendations."""
+        taste = {k: sorted(self.data.get(k) or []) for k in self.TASTE_KEYS}
+        return hashlib.sha1(json.dumps(taste, sort_keys=True).encode()).hexdigest()
 
     def _save(self):
         self.path.write_text(
@@ -823,6 +835,7 @@ class RecommendationEngine:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "index_mtime":  index_mtime,
             "prefs_mtime":  prefs_mtime,
+            "prefs_signature": self.prefs.taste_signature(),
             "story_count":  len(similar),
             "similar":      similar,
             "personalised": personalised,

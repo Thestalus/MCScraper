@@ -57,7 +57,12 @@ def load_recs_cache(state) -> bool:
         if data.get("index_mtime", 0) < index_mtime:
             print("Recs cache is stale (index updated) — run: make precalc-recs")
             return False
-        if data.get("prefs_mtime", 0) < prefs_mtime:
+        if "prefs_signature" in data and state.prefs is not None:
+            # Only likes/dislikes/hidden recs matter; reading history doesn't.
+            if data["prefs_signature"] != state.prefs.taste_signature():
+                print("Recs cache is stale (likes/dislikes changed) — run: make precalc-recs")
+                return False
+        elif data.get("prefs_mtime", 0) < prefs_mtime:
             print("Recs cache is stale (preferences updated) — run: make precalc-recs")
             return False
         state.recs_cache = data
