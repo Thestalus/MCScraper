@@ -34,6 +34,7 @@ import json
 import sys
 import logging
 from pathlib import Path
+from tag_trust import export_tags
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
@@ -1341,7 +1342,7 @@ def rebuild_jsonl_with_tags(index_path: Path, output_dir: Path) -> None:
         if not story.get("full_text") or story.get("fetch_error"):
             continue
 
-        at      = story.get("auto_tags") or {}
+        at      = export_tags(story.get("auto_tags"))
         cats    = ", ".join(story.get("categories", [])) or "fiction"
         themes  = ", ".join(at.get("themes", []))
         mc_type = ", ".join(at.get("mind_control_type", []))

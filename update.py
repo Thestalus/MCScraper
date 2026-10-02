@@ -37,6 +37,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from tag_trust import export_tags
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
@@ -380,7 +381,7 @@ def merge_new_stories(new_stories: list[dict]) -> int:
             for s in to_add:
                 if not s.get("full_text") or s.get("fetch_error"):
                     continue
-                at    = s.get("auto_tags") or {}
+                at    = export_tags(s.get("auto_tags"))
                 cats  = ", ".join(s.get("categories", []))
                 title = s.get("title", "")
                 auth  = s.get("author", "")

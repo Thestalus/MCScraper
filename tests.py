@@ -598,18 +598,25 @@ class TestJSONLRebuilder:
                     json.loads(line)   # raises if invalid
 
     def test_rebuild_tags_in_output(self):
-        """Tags should appear in the meta header of training records."""
+        """Trusted tags appear in the meta header; low-trust tags are filtered out."""
         from tagger import rebuild_jsonl_with_tags
+        story = {**SAMPLE_STORY_HYPNOSIS, "auto_tags": {
+            "themes": ["trigger phrase", "romance"],   # Tier 1 / not trusted
+            "mind_control_type": ["hypnosis"],         # AND-gated tag...
+            "_tag_sources": {"hypnosis": ["regex"]},   # ...but only regex agreed
+            "setting": ["home / domestic"],            # Tier 1
+            "length_class": "short story",
+        }}
         with tempfile.TemporaryDirectory() as tmpdir:
-            idx = self._make_tagged_index(Path(tmpdir))
+            idx = Path(tmpdir) / "stories_index.json"
+            idx.write_text(json.dumps(make_index([story])))
             rebuild_jsonl_with_tags(idx, Path(tmpdir))
-            lines = (Path(tmpdir) / "training_raw_pretraining.jsonl").read_text().splitlines()
-            # At least one record should contain theme or MC type metadata
-            full_output = "\n".join(lines)
-            has_meta = ("Themes:" in full_output or
-                        "Mind Control Method:" in full_output or
-                        "Setting:" in full_output)
-            assert has_meta
+            out = (Path(tmpdir) / "training_raw_pretraining.jsonl").read_text()
+            assert "Themes: trigger phrase" in out
+            assert "Setting: home / domestic" in out
+            assert "Length: short story" in out
+            assert "romance" not in out
+            assert "Mind Control Method" not in out
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

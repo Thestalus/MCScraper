@@ -20,6 +20,7 @@ import time
 import argparse
 import logging
 from pathlib import Path
+from tag_trust import export_tags
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -343,7 +344,7 @@ def fetch_full_story(landing_url: str) -> dict:
 # ─── Training format builders ─────────────────────────────────────────────────
 
 def to_raw_pretraining(story: Story) -> dict:
-    at    = story.auto_tags or {}
+    at    = export_tags(story.auto_tags)
     parts = [f"Title: {story.title}", f"Author: {story.author}"]
     if story.categories:              parts.append(f"Categories: {', '.join(story.categories)}")
     if at.get("themes"):              parts.append(f"Themes: {', '.join(at['themes'])}")
@@ -357,7 +358,7 @@ def to_raw_pretraining(story: Story) -> dict:
 
 
 def to_instruction_response(story: Story) -> dict:
-    at      = story.auto_tags or {}
+    at      = export_tags(story.auto_tags)
     cats    = ", ".join(story.categories) if story.categories else "fiction"
     themes  = ", ".join(at.get("themes", []))
     mc_type = ", ".join(at.get("mind_control_type", []))
@@ -376,7 +377,7 @@ def to_instruction_response(story: Story) -> dict:
 
 
 def to_completion(story: Story) -> dict:
-    at    = story.auto_tags or {}
+    at    = export_tags(story.auto_tags)
     cats  = ", ".join(story.categories) if story.categories else "fiction"
     parts = [f"Title: {story.title}", f"Author: {story.author}", f"Categories: {cats}"]
     if at.get("themes"):            parts.append(f"Themes: {', '.join(at['themes'])}")
