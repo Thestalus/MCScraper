@@ -989,3 +989,88 @@ class TestNetwork:
         result = fetch_full_story(urls[0])
         assert result.get("full_text"), "Story full text is empty"
         assert len(result["full_text"]) > 100
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BROWSER — every page renders (Flask test client, fixture corpus)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestBrowserPages:
+    """Load every page of the browser against a small tagged corpus.
+
+    The corpus goes through the real tagger and build_stories_db, so stories
+    reach the templates the same way they do in production (auto_tags as a
+    lazily parsed JSON string). Everything runs in a temp dir because the app
+    reads and writes ./output/.
+    """
+
+    @pytest.fixture(scope="class")
+    def corpus(self, tmp_path_factory):
+        from tagger import process_index
+        from build_stories_db import build
+
+        root = tmp_path_factory.mktemp("browser")
+        out  = root / "output"
+        out.mkdir()
+
+        bases = [SAMPLE_STORY_HYPNOSIS, SAMPLE_STORY_OFFICE,
+                 SAMPLE_STORY_FANTASY, SAMPLE_STORY_FIRST_PERSON]
+        stories = []
+        for i in range(20):
+            base = bases[i % len(bases)]
+            stories.append({**base, "id": f"{base['id']}{i}",
+                            "title": f"{base['title']} {i}",
+                            "author": f"Author {i % 5}"})
+        stories.append(SAMPLE_STORY_BROKEN)
+        idx = out / "stories_index.json"
+        idx.write_text(json.dumps(make_index(stories)))
+        process_index(idx)
+        build(str(idx), str(out / "stories_meta.db"), force=True)
+
+        ids = [s["id"] for s in stories[:20]]
+        (out / "preferences.json").write_text(json.dumps({
+            "liked_stories": ids[:3], "disliked_stories": [ids[3]],
+            "liked_authors": ["Author 1"], "disliked_authors": [],
+            "notes": {}, "hidden_recs": [], "want_to_read": [ids[4]],
+            "history": {ids[5]: {"chapter": 1, "total": 1, "ts": "2026-01-01T00:00:00"}},
+        }))
+
+        return root, ids
+
+    @pytest.fixture
+    def client(self, corpus, monkeypatch):
+        # Fresh app per test: pages parse auto_tags in place, so a shared app
+        # would hide bugs that only show on the first page after startup.
+        from app_factory import AppState, create_app
+        from services.data_store import load_data
+        root, ids = corpus
+        monkeypatch.chdir(root)
+        state = AppState(index_path="./output/stories_index.json")
+        load_data(state)
+        app = create_app(state)
+        app.config["TESTING"] = True
+        return app.test_client(), ids
+
+    @pytest.mark.parametrize("path", [
+        "/", "/?q=hypnosis", "/search?q=office", "/authors", "/tags", "/tag-stats",
+        "/stats", "/liked", "/history", "/want-to-read", "/new-stories",
+        "/recommendations", "/generate", "/bibles",
+    ])
+    def test_page_renders(self, client, path):
+        c, _ = client
+        resp = c.get(path)
+        assert resp.status_code == 200, f"{path} -> {resp.status_code}"
+
+    @pytest.mark.parametrize("template", ["/story/{id}", "/similar/{id}", "/author/Author 1"])
+    def test_story_pages_render(self, client, template):
+        c, ids = client
+        for sid in ids[:4]:  # one of each base story
+            path = template.format(id=sid)
+            resp = c.get(path)
+            assert resp.status_code == 200, f"{path} -> {resp.status_code}"
+
+    def test_random_redirects_to_a_story(self, client):
+        c, _ = client
+        resp = c.get("/random")
+        assert resp.status_code in (301, 302)
+        assert "/story/" in resp.headers["Location"]
