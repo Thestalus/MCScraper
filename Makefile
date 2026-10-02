@@ -399,9 +399,14 @@ precalc-recs: install-semantic
 	cd $(PROJECT_DIR) && $(PY) recommender.py --precalc --n-recs 200
 	@echo "$(GREEN)✓ Cache saved to output/recs_cache.json$(RESET)"
 
+# Only set up the venv if it doesn't exist yet — browse shouldn't hit the network
+# (pip upgrade + reinstalls) on every launch.
+$(PY):
+	@$(MAKE) --no-print-directory install
+
 .PHONY: browse
-browse: install
-	@$(PIP) install flask --quiet
+browse: | $(PY)
+	@$(PY) -c "import flask" 2>/dev/null || $(PIP) install flask --quiet
 	@echo "$(BOLD)Starting MC Archive browser...$(RESET)"
 	@echo "  Open: http://localhost:5003"
 	@echo "  Press Ctrl+C to stop"
