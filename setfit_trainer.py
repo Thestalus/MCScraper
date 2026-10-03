@@ -35,7 +35,7 @@ os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_predict, train_test_split
+from sklearn.model_selection import cross_val_predict
 from sklearn.metrics import f1_score, precision_score, recall_score
 import index_store
 
@@ -72,6 +72,20 @@ FINETUNE_DEVICE = "cuda"  # Mac: "mps" | Windows: "cuda"
 
 # ── Classifier ────────────────────────────────────────────────────────────────
 MIN_POSITIVES  = 50   # skip tags with fewer labeled training examples
+
+# ── Train / validation / test split (story level) ─────────────────────────────
+# Every labelled story belongs to exactly one split, decided by a hash of its ID
+# (stable as the corpus grows):
+#   train — encoder fine-tuning and classifier fitting
+#   val   — choosing each tag's probability threshold
+#   test  — reported by --eval, and never used for anything else
+# Stories listed in GOLD_PATH (human-verified labels) form a fourth split that
+# is excluded from all training and scored separately by --eval.
+SPLIT_SEED  = 1234
+VAL_SHARE   = 0.15
+TEST_SHARE  = 0.15
+GOLD_PATH   = "output/gold_labels.jsonl"   # {"id": ..., "tag": "dim:tag", "label": 0|1} per line
+SPLIT_MARKER = "split_info.json"           # written into SETFIT_MODEL_DIR by finetune_encoder
 
 # ── Tags to train ─────────────────────────────────────────────────────────────
 TARGET_TAGS = [
@@ -140,6 +154,43 @@ def load_index() -> list[dict]:
     stories = data.get("stories", data) if isinstance(data, dict) else data
     log.info(f"  {len(stories):,} stories loaded")
     return stories
+
+
+_gold_cache: dict | None = None
+
+
+def load_gold_labels(path: str | None = None) -> dict:
+    """Human-verified labels: {(story_id, "dim:tag"): 0|1}. Empty if no file."""
+    global _gold_cache
+    path = path or GOLD_PATH
+    if _gold_cache is not None and _gold_cache.get("_path") == path:
+        return _gold_cache["labels"]
+    labels = {}
+    if Path(path).exists():
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rec = json.loads(line)
+                labels[(rec["id"], rec["tag"])] = int(rec["label"])
+    _gold_cache = {"_path": path, "labels": labels, "ids": {sid for (sid, _) in labels}}
+    return labels
+
+
+def _gold_ids() -> set:
+    load_gold_labels()
+    return _gold_cache["ids"]
+
+
+def split_of(story_id: str) -> str:
+    """'train', 'val', 'test', or 'gold' for this story (see SPLIT_SEED above)."""
+    if story_id in _gold_ids():
+        return "gold"
+    h = hashlib.sha1(f"{SPLIT_SEED}:{story_id}".encode("utf-8")).digest()
+    u = int.from_bytes(h[:8], "big") / 2**64
+    if u < TEST_SHARE:
+        return "test"
+    if u < TEST_SHARE + VAL_SHARE:
+        return "val"
+    return "train"
 
 
 def story_sample(story: dict) -> str:
@@ -270,6 +321,17 @@ def count_gold_positives(stories: list[dict], dim: str, tag: str,
 
 # ── Phase 1: SetFit contrastive fine-tuning ───────────────────────────────────
 
+def encoder_training_pool(stories: list[dict], audit_labels: dict) -> list[dict]:
+    """Stories the encoder may learn from: labelled (audit or Svengali), with
+    text, and in the train split. Val/test/gold stories must not shape the
+    encoder, or their later evaluation is no longer independent."""
+    auditlabeled_ids = {sid for (sid, _) in audit_labels}
+    sv_ids = {s.get("id") for s in svengali_stories(stories)}
+    return [s for s in stories
+            if has_text(s) and (s.get("id") in auditlabeled_ids or s.get("id") in sv_ids)
+            and split_of(s.get("id", "")) == "train"]
+
+
 def finetune_encoder(stories: list[dict], active_tags: list[tuple[str, str]],
                      audit_labels: dict | None = None,
                      use_svengali_fallback: bool = True) -> None:
@@ -288,11 +350,8 @@ def finetune_encoder(stories: list[dict], active_tags: list[tuple[str, str]],
     if audit_labels is None:
         audit_labels = {}
 
-    # Training pool: stories with audit labels OR Svengali labels (and have text)
     auditlabeled_ids = {sid for (sid, _) in audit_labels}
-    sv_ids = {s.get("id") for s in svengali_stories(stories)}
-    pool = [s for s in stories
-            if has_text(s) and (s.get("id") in auditlabeled_ids or s.get("id") in sv_ids)]
+    pool = encoder_training_pool(stories, audit_labels)
 
     if len(pool) > MAX_TRAIN_STORIES:
         import random
@@ -376,7 +435,11 @@ def finetune_encoder(stories: list[dict], active_tags: list[tuple[str, str]],
     # The head will be replaced by our own calibrated classifiers
     Path(SETFIT_MODEL_DIR).mkdir(parents=True, exist_ok=True)
     model.model_body.save(SETFIT_MODEL_DIR)
-    log.info(f"Fine-tuned encoder saved to {SETFIT_MODEL_DIR}/")
+    (Path(SETFIT_MODEL_DIR) / SPLIT_MARKER).write_text(json.dumps({
+        "split_seed": SPLIT_SEED, "val_share": VAL_SHARE, "test_share": TEST_SHARE,
+        "train_pool_stories": len(pool), "gold_stories": len({sid for (sid, _) in load_gold_labels()}),
+    }, indent=2))
+    log.info(f"Fine-tuned encoder saved to {SETFIT_MODEL_DIR}/ (train split only)")
 
 
 # ── Phase 2: Build embeddings with fine-tuned model ───────────────────────────
@@ -571,141 +634,182 @@ def _hybrid_labels(stories: list[dict], candidate_idx: np.ndarray,
     return all_idx, y, label_sources
 
 
+def _best_threshold(y: np.ndarray, proba: np.ndarray) -> tuple[float, float]:
+    best_thr, best_f1 = 0.5, 0.0
+    for thr in np.arange(0.25, 0.95, 0.01):
+        f = f1_score(y, (proba >= thr).astype(int), zero_division=0)
+        if f > best_f1:
+            best_f1, best_thr = f, float(thr)
+    return best_thr, best_f1
+
+
 def train_classifiers(stories: list[dict], vecs: np.ndarray,
                       active_tags: list[tuple[str, str]],
                       audit_labels: dict | None = None,
                       use_svengali_fallback: bool = True) -> dict:
     """
-    Train per-tag logistic regression classifiers with OOF threshold calibration.
-    Uses hybrid labels: audit gold first, Svengali fallback second.
-    Svengali absence is never treated as negative.
+    Train per-tag logistic regression classifiers.
+
+    Uses hybrid labels (audit first, Svengali fallback; Svengali absence is
+    never a negative) and the story-level split (see split_of):
+      1. fit on the train split
+      2. choose the probability threshold on the val split (falls back to
+         out-of-fold predictions on train when val has too few examples)
+      3. refit on train + val for production tagging
+    The test and gold splits are never touched here.
     """
     if audit_labels is None:
         audit_labels = {}
 
-    # Candidate pool: all stories with embeddings (not just Svengali-tagged)
     all_idx = np.arange(len(stories))
+    story_split = np.array([split_of(s.get("id", "")) for s in stories])
 
     classifiers = {}
-    print(f"\n{'Dimension':<20} {'Tag':<35} {'Pos':>5} {'Neg':>6}  "
-          f"{'gPos':>5} {'gNeg':>5} {'sPos':>5} {'sNeg':>5}  "
-          f"{'CV F1':>6}  {'OOF Thr':>7}  {'OOF F1':>6}")
-    print("-" * 115)
+    print(f"\n{'Dimension':<20} {'Tag':<35} {'TrPos':>5} {'TrNeg':>6} {'VaPos':>5}  "
+          f"{'TrCV F1':>7}  {'Thr':>5} {'from':>5}  {'Val F1':>6}")
+    print("-" * 110)
 
     for dim, tag in active_tags:
         tag_idx, y, srcs = _hybrid_labels(
             stories, all_idx, dim, tag, audit_labels,
             use_svengali_fallback=use_svengali_fallback,
         )
-        tag_vecs = vecs[tag_idx]
-        n_pos = int(y.sum())
-        n_neg = int(len(y) - n_pos)
+        split = story_split[tag_idx]
+        tr, va = split == "train", split == "val"
+        n_pos = int(y[tr].sum())
+        n_neg = int(tr.sum() - n_pos)
         if n_pos < MIN_POSITIVES:
-            log.info(f"  Skipping {dim}:{tag} — only {n_pos} positives "
-                     f"(gold={srcs['gold_pos']}, sv={srcs['sv_pos']})")
+            log.info(f"  Skipping {dim}:{tag} — only {n_pos} train-split positives "
+                     f"(gold={srcs['gold_pos']}, sv={srcs['sv_pos']} across all splits)")
             continue
 
-        clf = LogisticRegression(C=0.5, class_weight="balanced",
-                                 max_iter=1000, random_state=42)
+        def new_clf():
+            return LogisticRegression(C=0.5, class_weight="balanced",
+                                      max_iter=1000, random_state=42)
 
-        # CV F1 estimate
-        from sklearn.model_selection import StratifiedKFold
-        cv_preds = cross_val_predict(clf, tag_vecs, y, cv=5,
-                                     method="predict", n_jobs=-1)
-        cv_f1 = f1_score(y, cv_preds, zero_division=0)
+        X_tr, y_tr = vecs[tag_idx[tr]], y[tr]
+        # Diagnostic only: cross-validated F1 within the train split
+        cv_preds = cross_val_predict(new_clf(), X_tr, y_tr, cv=5, method="predict", n_jobs=-1)
+        train_cv_f1 = f1_score(y_tr, cv_preds, zero_division=0)
 
-        # OOF probability for threshold calibration
-        oof_proba = cross_val_predict(clf, tag_vecs, y, cv=5,
-                                      method="predict_proba", n_jobs=-1)[:, 1]
-        best_thr, best_f1 = 0.5, 0.0
-        for thr in np.arange(0.25, 0.95, 0.01):
-            preds = (oof_proba >= thr).astype(int)
-            f = f1_score(y, preds, zero_division=0)
-            if f > best_f1:
-                best_f1, best_thr = f, float(thr)
+        y_va = y[va]
+        if y_va.sum() >= 5 and (len(y_va) - y_va.sum()) >= 5:
+            proba_va = new_clf().fit(X_tr, y_tr).predict_proba(vecs[tag_idx[va]])[:, 1]
+            best_thr, sel_f1 = _best_threshold(y_va, proba_va)
+            thr_source = "val"
+        else:
+            oof = cross_val_predict(new_clf(), X_tr, y_tr, cv=5,
+                                    method="predict_proba", n_jobs=-1)[:, 1]
+            best_thr, sel_f1 = _best_threshold(y_tr, oof)
+            thr_source = "oof"
 
-        # Train final classifier on all confident-label data
-        clf.fit(tag_vecs, y)
+        # Production classifier: all non-test, non-gold labelled data
+        use = tr | va
+        final = new_clf().fit(vecs[tag_idx[use]], y[use])
         classifiers[f"{dim}:{tag}"] = {
-            "clf":           clf,
-            "dim":           dim,
-            "tag":           tag,
-            "opt_threshold": best_thr,
-            "oof_f1":        best_f1,
-            "n_pos":         int(n_pos),
+            "clf":              final,
+            "dim":              dim,
+            "tag":              tag,
+            "opt_threshold":    best_thr,
+            "threshold_source": thr_source,        # "val" or "oof" (train-split fallback)
+            "val_f1":           sel_f1 if thr_source == "val" else None,
+            "oof_f1":           sel_f1,             # F1 at the chosen threshold (optimistic: same data)
+            "train_cv_f1":      train_cv_f1,
+            "n_pos":            n_pos,
+            "split":            {"seed": SPLIT_SEED, "val": VAL_SHARE, "test": TEST_SHARE},
         }
-        print(f"  {dim:<20} {tag:<35} {n_pos:>5,} {n_neg:>6,}  "
-              f"{srcs['gold_pos']:>5} {srcs['gold_neg']:>5} "
-              f"{srcs['sv_pos']:>5} {srcs['sv_neg']:>5}  "
-              f"{cv_f1:>6.3f}  {best_thr:>7.2f}  {best_f1:>6.3f}")
+        print(f"  {dim:<20} {tag:<35} {n_pos:>5,} {n_neg:>6,} {int(y_va.sum()):>5,}  "
+              f"{train_cv_f1:>7.3f}  {best_thr:>5.2f} {thr_source:>5}  {sel_f1:>6.3f}")
 
-    print(f"\nTrained {len(classifiers)} classifiers.")
+    print(f"\nTrained {len(classifiers)} classifiers. Threshold-selection F1 is optimistic "
+          f"(chosen on the same data); run --eval for the held-out test split.")
     return classifiers
 
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
 
+def _score(rows_out, classifiers, stories, vecs, idx, labels_fn, threshold):
+    tot = [0, 0, 0]
+    for key, info in classifiers.items():
+        dim, tag = info["dim"], info["tag"]
+        tag_idx, y = labels_fn(idx, dim, tag)
+        if len(tag_idx) == 0 or y.sum() == 0:
+            continue
+        thr   = info.get("opt_threshold", 0.5) if threshold == 0.0 else threshold
+        preds = (info["clf"].predict_proba(vecs[tag_idx])[:, 1] >= thr).astype(int)
+        tp = int(((preds == 1) & (y == 1)).sum())
+        fp = int(((preds == 1) & (y == 0)).sum())
+        fn = int(((preds == 0) & (y == 1)).sum())
+        p  = tp / (tp + fp) if (tp + fp) else 0.0
+        r  = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = 2 * p * r / (p + r) if (p + r) else 0.0
+        tot[0] += tp; tot[1] += fp; tot[2] += fn
+        rows_out.append((f1, dim, tag, thr, len(tag_idx), p, r, f1, tp, fp, fn))
+    return tot
+
+
+def _print_rows(rows, tot, title):
+    print(f"\n{title}\n")
+    print(f"{'Dimension':<20} {'Tag':<35} {'Thr':>5}  "
+          f"{'N':>5} {'P':>6} {'R':>6} {'F1':>6}  {'TP':>5} {'FP':>5} {'FN':>5}")
+    print("-" * 105)
+    for _, dim, tag, thr, n, p, r, f1, tp, fp, fn in sorted(rows, key=lambda x: x[0]):
+        print(f"  {dim:<20} {tag:<35} {thr:>5.2f}  "
+              f"{n:>5,} {p:>5.0%} {r:>5.0%} {f1:>6.3f}  {tp:>5,} {fp:>5,} {fn:>5,}")
+    tp, fp, fn = tot
+    mp = tp / (tp + fp) if (tp + fp) else 0
+    mr = tp / (tp + fn) if (tp + fn) else 0
+    mf = 2 * mp * mr / (mp + mr) if (mp + mr) else 0
+    print("-" * 105)
+    print(f"  {'MICRO AVERAGE':<61} {mp:>5.0%} {mr:>5.0%} {mf:>6.3f}  {tp:>5,} {fp:>5,} {fn:>5,}")
+
+
 def eval_classifiers(stories: list[dict], vecs: np.ndarray,
                      classifiers: dict, threshold: float = 0.0,
                      audit_labels: dict | None = None,
                      use_svengali_fallback: bool = True) -> None:
-    """Evaluate classifiers using hybrid labels (audit gold first, Svengali fallback).
+    """Report precision/recall/F1 on stories that played no part in training.
 
-    Uses a held-out 20% split of all confidently-labeled stories (not just Svengali).
-    N varies per row because each tag has a different confident-example pool.
+    1. The test split, with hybrid labels (LLM audit + Svengali) — "held-out
+       test (LLM-adjudicated / community labels)".
+    2. The gold split, if GOLD_PATH exists, with human labels only.
+    Warns when the encoder predates the split (it may have seen test stories).
     """
     if audit_labels is None:
         audit_labels = {}
 
-    # Eval pool: all stories (hybrid labels determine which have confident labels)
-    all_idx = np.arange(len(stories))
-    # Hold out 20% by story index for eval
-    _, eval_idx = train_test_split(all_idx, test_size=0.2, random_state=42)
+    marker = Path(SETFIT_MODEL_DIR) / SPLIT_MARKER
+    if Path(SETFIT_MODEL_DIR).exists() and not marker.exists():
+        print("\nWARNING: the fine-tuned encoder was trained before the train/val/test split "
+              "existed, so it may have seen test stories. Test scores are optimistic until "
+              "the encoder is retrained (make train-setfit).")
 
-    print(f"\nEvaluating on up to {len(eval_idx):,} held-out stories (N varies per tag)...\n")
-    print(f"{'Dimension':<20} {'Tag':<35} {'OOF Thr':>7}  "
-          f"{'N':>5} {'P':>6} {'R':>6} {'F1':>6}  {'TP':>5} {'FP':>5} {'FN':>5}")
-    print("-" * 105)
+    test_idx = np.array([i for i, s in enumerate(stories) if split_of(s.get("id", "")) == "test"])
 
-    all_tp = all_fp = all_fn = 0
+    def hybrid(idx, dim, tag):
+        tag_idx, y, _ = _hybrid_labels(stories, idx, dim, tag, audit_labels,
+                                       use_svengali_fallback=use_svengali_fallback,
+                                       max_neg_ratio=9999)   # don't cap negatives for eval
+        return tag_idx, y
+
     rows = []
-    for key, info in classifiers.items():
-        dim, tag = info["dim"], info["tag"]
+    tot = _score(rows, classifiers, stories, vecs, test_idx, hybrid, threshold)
+    _print_rows(rows, tot, f"Held-out TEST split: {len(test_idx):,} stories, never used for "
+                           f"encoder, classifier or threshold (labels: LLM audit + Svengali)")
 
-        # Hybrid labels; don't cap negatives for eval
-        tag_eval_idx, y, _ = _hybrid_labels(
-            stories, eval_idx, dim, tag, audit_labels,
-            use_svengali_fallback=use_svengali_fallback,
-            max_neg_ratio=9999,
-        )
-        if len(tag_eval_idx) == 0 or y.sum() == 0:
-            continue
+    gold = load_gold_labels()
+    if gold:
+        id_to_i = {s.get("id"): i for i, s in enumerate(stories)}
 
-        tag_eval_vecs = vecs[tag_eval_idx]
-        thr   = info.get("opt_threshold", 0.5) if threshold == 0.0 else threshold
-        proba = info["clf"].predict_proba(tag_eval_vecs)[:, 1]
-        preds = (proba >= thr).astype(int)
+        def gold_labels(_idx, dim, tag):
+            pairs = [(id_to_i[sid], lab) for (sid, key), lab in gold.items()
+                     if key == f"{dim}:{tag}" and sid in id_to_i]
+            return (np.array([i for i, _ in pairs], dtype=int),
+                    np.array([lab for _, lab in pairs], dtype=int))
 
-        tp = int(((preds == 1) & (y == 1)).sum())
-        fp = int(((preds == 1) & (y == 0)).sum())
-        fn = int(((preds == 0) & (y == 1)).sum())
-        p  = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        r  = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-        all_tp += tp; all_fp += fp; all_fn += fn
-        rows.append((f1, dim, tag, thr, len(tag_eval_idx), p, r, f1, tp, fp, fn))
-
-    rows.sort(key=lambda x: x[0])
-    for _, dim, tag, thr, n, p, r, f1, tp, fp, fn in rows:
-        print(f"  {dim:<20} {tag:<35} {thr:>7.2f}  "
-              f"{n:>5,} {p:>5.0%} {r:>5.0%} {f1:>6.3f}  {tp:>5,} {fp:>5,} {fn:>5,}")
-
-    mp = all_tp / (all_tp + all_fp) if (all_tp + all_fp) > 0 else 0
-    mr = all_tp / (all_tp + all_fn) if (all_tp + all_fn) > 0 else 0
-    mf = 2 * mp * mr / (mp + mr) if (mp + mr) > 0 else 0
-    print("-" * 105)
-    print(f"  {'MICRO AVERAGE (confident labels only)':<63} {mp:>5.0%} {mr:>5.0%} {mf:>6.3f}  "
-          f"{all_tp:>5,} {all_fp:>5,} {all_fn:>5,}")
+        rows = []
+        tot = _score(rows, classifiers, stories, vecs, None, gold_labels, threshold)
+        _print_rows(rows, tot, f"GOLD set: {len(_gold_ids()):,} stories with human-verified labels")
 
 
 # ── Tagging ───────────────────────────────────────────────────────────────────

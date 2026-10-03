@@ -1404,3 +1404,79 @@ class TestChatDataset:
         out, val = self._run(tmp_path, monkeypatch)
         assert (out.read_bytes(), val.read_bytes()) == first
         assert (tmp_path / "chat_data.manifest.json").exists()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SETFIT — train / val / test / gold separation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestSetFitSplit:
+
+    @pytest.fixture(autouse=True)
+    def no_gold(self, tmp_path, monkeypatch):
+        import setfit_trainer as st
+        monkeypatch.setattr(st, "GOLD_PATH", str(tmp_path / "gold_labels.jsonl"))
+        monkeypatch.setattr(st, "_gold_cache", None)
+        return st
+
+    def test_split_is_stable_and_proportioned(self, no_gold):
+        st = no_gold
+        ids = [f"Story{i}" for i in range(6000)]
+        splits = [st.split_of(i) for i in ids]
+        assert splits == [st.split_of(i) for i in ids]
+        assert abs(splits.count("test") / 6000 - st.TEST_SHARE) < 0.03
+        assert abs(splits.count("val") / 6000 - st.VAL_SHARE) < 0.03
+
+    def test_gold_stories_form_their_own_split(self, no_gold, tmp_path, monkeypatch):
+        st = no_gold
+        (tmp_path / "gold_labels.jsonl").write_text(
+            json.dumps({"id": "Story7", "tag": "mind_control_type:hypnosis", "label": 1}) + "\n")
+        monkeypatch.setattr(st, "_gold_cache", None)
+        assert st.split_of("Story7") == "gold"
+
+    def _corpus(self, n=900):
+        import numpy as np
+        stories, rows = [], []
+        for i in range(n):
+            hyp = i % 3 == 0
+            tag = "hypnosis" if hyp else "magic"
+            stories.append({"id": f"Story{i}", "full_text": "text",
+                            "auto_tags": {"mind_control_type": [tag], "_svengali_tags": [tag],
+                                          "_tag_sources": {tag: ["svengali"]}}})
+            rows.append([1.0 if hyp else -1.0, float(i % 7) / 7, float(i)])  # last col = story index
+        return stories, np.array(rows, dtype=np.float32)
+
+    def test_encoder_pool_is_train_only(self, no_gold):
+        st = no_gold
+        stories, _ = self._corpus()
+        pool = st.encoder_training_pool(stories, {})
+        assert pool and all(st.split_of(s["id"]) == "train" for s in pool)
+
+    def test_classifiers_never_fit_on_test_stories(self, no_gold, monkeypatch):
+        import setfit_trainer as st
+        from sklearn.linear_model import LogisticRegression
+        seen = set()
+
+        class Recording(LogisticRegression):
+            def fit(self, X, y, *a, **k):
+                seen.update(int(v) for v in X[:, -1])
+                return super().fit(X, y, *a, **k)
+
+        monkeypatch.setattr(st, "LogisticRegression", Recording)
+        monkeypatch.setattr(st, "MIN_POSITIVES", 10)
+        stories, vecs = self._corpus()
+        clfs = st.train_classifiers(stories, vecs, [("mind_control_type", "hypnosis")])
+        assert "mind_control_type:hypnosis" in clfs
+        assert clfs["mind_control_type:hypnosis"]["threshold_source"] == "val"
+        fitted_splits = {st.split_of(stories[i]["id"]) for i in seen}
+        assert fitted_splits <= {"train", "val"}
+        assert any(st.split_of(stories[i]["id"]) == "test" for i in range(len(stories)))
+
+    def test_eval_reports_test_split_only(self, no_gold, monkeypatch, capsys):
+        import setfit_trainer as st
+        monkeypatch.setattr(st, "MIN_POSITIVES", 10)
+        stories, vecs = self._corpus()
+        clfs = st.train_classifiers(stories, vecs, [("mind_control_type", "hypnosis")])
+        st.eval_classifiers(stories, vecs, clfs)
+        n_test = sum(st.split_of(s["id"]) == "test" for s in stories)
+        assert f"Held-out TEST split: {n_test:,} stories" in capsys.readouterr().out
