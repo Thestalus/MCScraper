@@ -1310,3 +1310,97 @@ class TestPreferenceConcurrency:
         saved = json.loads(path.read_text())
         assert len(saved["liked_stories"]) == 8 * 40
         assert len(saved["history"]) == 8 * 40
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRAINING DATA — reproducibility and story-level validation split
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestTrainingDataset:
+
+    @pytest.fixture
+    def config(self, tmp_path, monkeypatch):
+        import train
+        body = " ".join(["She listened to the words and felt her thoughts slow."] * 220)
+        stories = [{
+            "id": f"Story{i}", "title": f"Story {i}", "author": f"Author {i % 4}",
+            "categories": ["mc", "mf"], "word_count": 2200, "full_text": body,
+            "description": "d", "source": "live",
+            "auto_tags": {"themes": ["trigger phrase", "slave mentality", "romance"],
+                          "tone": ["psychological"], "content_type": ["male dominant"]},
+        } for i in range(40)]
+        (tmp_path / "stories_index.json").write_text(json.dumps(make_index(stories)))
+        for key, name in [("index_path", "stories_index.json"), ("prefs_path", "preferences.json"),
+                          ("train_data_path", "train_data.jsonl"), ("val_data_path", "val_data.jsonl")]:
+            monkeypatch.setitem(train.CONFIG, key, str(tmp_path / name))
+        monkeypatch.setitem(train.CONFIG, "val_fraction", 0.25)
+        return train, tmp_path
+
+    def _titles(self, path):
+        out = set()
+        for line in path.read_text().splitlines():
+            for m in json.loads(line)["messages"]:
+                if m["role"] == "user":
+                    out.add(re.search(r'titled "([^"]+)"', m["content"]).group(1)
+                            if 'titled "' in m["content"] else m["content"][:60])
+        return out
+
+    def test_same_seed_gives_identical_files(self, config):
+        train, tmp = config
+        train.prepare_data()
+        first = (tmp / "train_data.jsonl").read_bytes(), (tmp / "val_data.jsonl").read_bytes()
+        train.prepare_data()
+        assert ((tmp / "train_data.jsonl").read_bytes(), (tmp / "val_data.jsonl").read_bytes()) == first
+
+    def test_validation_stories_never_in_training(self, config):
+        train, tmp = config
+        train.prepare_data()
+        from dataset_utils import is_validation
+        val_ids = {f"Story{i}" for i in range(40) if is_validation(f"Story{i}", 0.25, train.CONFIG["dataset_seed"])}
+        assert 0 < len(val_ids) < 40
+        train_text = (tmp / "train_data.jsonl").read_text()
+        val_text = (tmp / "val_data.jsonl").read_text()
+        for sid in val_ids:
+            title = sid.replace("Story", "Story ")
+            assert f'"{title}"' not in train_text.replace('\\"', '"')
+            assert title in val_text
+
+    def test_manifest_records_seed_and_hashes(self, config):
+        train, tmp = config
+        train.prepare_data()
+        from dataset_utils import file_sha256
+        m = json.loads((tmp / "train_data.manifest.json").read_text())
+        assert m["settings"]["dataset_seed"] == train.CONFIG["dataset_seed"]
+        assert m["outputs"]["train"]["sha256"] == file_sha256(tmp / "train_data.jsonl")
+        assert m["counts"]["val_stories"] > 0 and m["code"]["tag_trust.py"]
+
+
+class TestChatDataset:
+
+    def _run(self, tmp_path, monkeypatch):
+        import sys
+        import extract_chatbot_data as ecd
+        paras = []
+        for i in range(30):
+            paras.append(f'"Look at me, number {i}," she said softly. "Keep breathing."')
+            paras.append(f"He watched the pendant swing for the {i}th time and felt calm.")
+        text = "\n\n".join(paras)
+        stories = [{"id": f"Chat{i}", "title": f"Chat {i}", "author": "A", "categories": ["mc"],
+                    "word_count": 1500, "full_text": text, "auto_tags": {}} for i in range(30)]
+        (tmp_path / "stories_index.json").write_text(json.dumps(make_index(stories)))
+        monkeypatch.setattr(ecd, "INDEX_PATH", tmp_path / "stories_index.json")
+        monkeypatch.setattr(ecd, "PREFS_PATH", tmp_path / "preferences.json")
+        monkeypatch.setattr(ecd, "VAL_PATH", tmp_path / "chat_val.jsonl")
+        monkeypatch.setattr(ecd, "VAL_FRACTION", 0.3)
+        out = tmp_path / "chat_data.jsonl"
+        monkeypatch.setattr(sys, "argv", ["extract_chatbot_data.py", "--output", str(out)])
+        ecd.main()
+        return out, tmp_path / "chat_val.jsonl"
+
+    def test_reproducible_and_story_level_split(self, tmp_path, monkeypatch):
+        out, val = self._run(tmp_path, monkeypatch)
+        first = out.read_bytes(), val.read_bytes()
+        assert first[0] and first[1], "expected both train and validation conversations"
+        out, val = self._run(tmp_path, monkeypatch)
+        assert (out.read_bytes(), val.read_bytes()) == first
+        assert (tmp_path / "chat_data.manifest.json").exists()

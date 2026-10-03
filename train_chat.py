@@ -78,6 +78,7 @@ CONFIG = {
 
     # ── Paths ──────────────────────────────────────────────────────────────────
     "train_data":   "./output/chat_data.jsonl",
+    "val_data":     "./output/chat_val.jsonl",     # held-out stories, from extract_chatbot_data.py
     "output_dir":   "./output/chat_lora",
     "merged_dir":   "./output/chat_merged",
 
@@ -187,6 +188,24 @@ def train(resume: bool = False):
 
     dataset = dataset.map(format_example, batched=False)
 
+    # Held-out stories (written by extract_chatbot_data.py). Validation loss shows
+    # whether the model generalises to unseen stories; training loss can't.
+    val_path = Path(CONFIG["val_data"])
+    eval_dataset, eval_kwargs = None, {}
+    if val_path.exists() and val_path.stat().st_size > 0:
+        eval_dataset = load_dataset("json", data_files=str(val_path), split="train")
+        eval_dataset = eval_dataset.map(format_example, batched=False)
+        print(f"Validation: {len(eval_dataset):,} examples (held-out stories)")
+        import inspect
+        # transformers renamed evaluation_strategy → eval_strategy (4.41+)
+        strategy_arg = ("eval_strategy" if "eval_strategy" in
+                        inspect.signature(TrainingArguments.__init__).parameters
+                        else "evaluation_strategy")
+        eval_kwargs = {strategy_arg: "steps", "eval_steps": CONFIG["save_steps"],
+                       "per_device_eval_batch_size": CONFIG["batch_size"]}
+    else:
+        print("No validation data — re-run extract_chatbot_data.py to create chat_val.jsonl")
+
     steps_per_epoch = max(1, len(dataset) // (CONFIG["batch_size"] * CONFIG["grad_accum"]))
     total_steps     = steps_per_epoch * CONFIG["epochs"]
 
@@ -198,6 +217,8 @@ def train(resume: bool = False):
     class LossCallback(TrainerCallback):
         def on_log(self, args, state, control, logs=None, **kwargs):
             nonlocal best
+            if logs and "eval_loss" in logs:
+                print(f"  Step {state.global_step:>5}  validation loss: {logs['eval_loss']:.4f}")
             if not logs or "loss" not in logs:
                 return
             loss = logs["loss"]
@@ -235,12 +256,14 @@ def train(resume: bool = False):
         seed                        = 42,
         report_to                   = "none",
         resume_from_checkpoint      = resume,
+        **eval_kwargs,
     )
 
     trainer = SFTTrainer(
         model              = model,
         tokenizer          = tokenizer,
         train_dataset      = dataset,
+        eval_dataset       = eval_dataset,
         dataset_text_field = "text",
         max_seq_length     = CONFIG["max_seq_length"],
         args               = args,

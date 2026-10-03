@@ -131,6 +131,15 @@ CONFIG = {
     "max_stories":      6000,
     "shuffle":          True,
 
+    # ── Reproducibility and validation ────────────────────────────────────────
+    # dataset_seed fixes tag dropout and shuffling, so the same index + code
+    # always produces the same train_data.jsonl. val_fraction of *stories*
+    # (all their chunks together) go to val_data.jsonl instead, chosen by a
+    # hash of the story ID so the split is stable as the corpus grows.
+    "dataset_seed":     42,
+    "val_fraction":     0.05,
+    "val_data_path":    "./output/val_data.jsonl",
+
     # ── Preference weighting ──────────────────────────────────────────────────
     # Stories you liked appear multiple times in training data
     # Stories you disliked are excluded entirely
@@ -170,6 +179,7 @@ CONFIG = {
 }
 
 
+from dataset_utils import is_validation, write_manifest
 from tag_trust import (  # noqa: F401 — re-exported for existing callers
     TIER_1_TAGS, AND_GATE_TAGS, _STRUCTURAL_DIMS, DROPOUT_RATE, story_training_tags,
 )
@@ -343,7 +353,11 @@ def prepare_data(use_chunking: bool = False):
     use_chunking=True splits long stories into overlapping chunks so the
     full text is seen during training. Best used with A100 (more VRAM) since
     chunking increases the number of training examples significantly.
+
+    Also writes val_data.jsonl (held-out stories, never in the training file)
+    and train_data.manifest.json (seed, split, input fingerprints, file hashes).
     """
+    random.seed(CONFIG["dataset_seed"])   # tag dropout + shuffles are reproducible
     index_path = Path(CONFIG["index_path"])
     if not index_path.exists():
         print(f"ERROR: {index_path} not found. Run the scraper first.")
@@ -445,12 +459,17 @@ def prepare_data(use_chunking: bool = False):
     # Expand weights and chunk if requested
     max_chunk_words = int(CONFIG["max_seq_length"] * 0.65)  # ~65% of context = one chunk
 
-    records = []
+    records, val_records = [], []
+    val_stories = 0
     for s, weight in weighted:
         if use_chunking and s.get("word_count", 0) > max_chunk_words:
             chunks = chunk_story(s, max_words=max_chunk_words, overlap_words=150)
         else:
             chunks = [story_to_record(s)]
+        if is_validation(s.get("id", ""), CONFIG["val_fraction"], CONFIG["dataset_seed"]):
+            val_records.extend(chunks)          # once, unweighted — it's a measurement
+            val_stories += 1
+            continue
         for _ in range(weight):
             records.extend(chunks)
 
@@ -467,6 +486,26 @@ def prepare_data(use_chunking: bool = False):
             for m in rec.get("messages", []):
                 if m.get("role") == "assistant":
                     total_words += len(m["content"].split())
+
+    val_path = Path(CONFIG["val_data_path"])
+    with open(val_path, "w", encoding="utf-8") as f:
+        for rec in val_records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print(f"\nValidation split: {val_stories:,} stories, {len(val_records):,} records → {val_path}")
+
+    manifest_path = out_path.with_suffix(".manifest.json")
+    write_manifest(
+        manifest_path,
+        outputs={"train": out_path, "val": val_path},
+        inputs={"index": index_path, "preferences": CONFIG["prefs_path"]},
+        settings={k: CONFIG[k] for k in ("dataset_seed", "val_fraction", "min_words", "max_words",
+                                         "min_trusted_tags", "exclude_wayback", "max_stories",
+                                         "max_seq_length", "base_model")
+                  if k in CONFIG} | {"use_chunking": use_chunking},
+        counts={"train_records": len(records), "val_records": len(val_records),
+                "val_stories": val_stories, "kept_stories": len(weighted)},
+    )
+    print(f"Manifest → {manifest_path}")
 
     total_tokens_est = total_words * 1.3
     size_mb  = out_path.stat().st_size / 1024 / 1024
@@ -675,6 +714,26 @@ def train(resume: bool = False):
 
     dataset = dataset.map(format_chat, batched=False)
 
+    # Held-out stories written by --prepare; eval loss on them shows whether the
+    # model is generalising or just memorising (training loss can't tell).
+    val_path = Path(CONFIG["val_data_path"])
+    eval_dataset = None
+    if val_path.exists() and val_path.stat().st_size > 0:
+        eval_dataset = load_dataset("json", data_files=str(val_path), split="train")
+        eval_dataset = eval_dataset.map(format_chat, batched=False)
+        print(f"  {len(eval_dataset):,} validation examples (held-out stories)")
+    else:
+        print("  No validation data — re-run --prepare to create val_data.jsonl")
+    eval_kwargs = {}
+    if eval_dataset is not None:
+        import inspect
+        # transformers renamed evaluation_strategy → eval_strategy (4.41+)
+        strategy_arg = ("eval_strategy" if "eval_strategy" in
+                        inspect.signature(TrainingArguments.__init__).parameters
+                        else "evaluation_strategy")
+        eval_kwargs = {strategy_arg: "steps", "eval_steps": CONFIG["save_steps"],
+                       "per_device_eval_batch_size": CONFIG["batch_size"]}
+
     # Training arguments — tuned for 8GB
     training_args = TrainingArguments(
         output_dir                  = str(out_dir),
@@ -694,6 +753,7 @@ def train(resume: bool = False):
         seed                        = 42,
         report_to                   = "none",   # set to "wandb" to enable W&B logging
         resume_from_checkpoint      = resume,
+        **eval_kwargs,
     )
 
     # Calculate total steps for ETA
@@ -708,11 +768,14 @@ def train(resume: bool = False):
         def on_log(self, args, state, control, logs=None, **kwargs):
             if logs and "loss" in logs:
                 tracker.on_log(state.global_step, logs["loss"])
+            if logs and "eval_loss" in logs:
+                print(f"  [step {state.global_step}] validation loss: {logs['eval_loss']:.4f}")
 
     trainer = SFTTrainer(
         model              = model,
         tokenizer          = tokenizer,
         train_dataset      = dataset,
+        eval_dataset       = eval_dataset,
         dataset_text_field = "text",
         max_seq_length     = CONFIG["max_seq_length"],
         args               = training_args,

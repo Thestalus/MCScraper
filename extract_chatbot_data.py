@@ -28,6 +28,8 @@ import random
 import sys
 from pathlib import Path
 
+from dataset_utils import is_validation, write_manifest
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 INDEX_PATH  = Path("output/stories_index.json")
@@ -51,6 +53,12 @@ SCENE_RESPONSE = 2     # paragraphs per "assistant" turn
 # Weight of liked/picked stories
 LIKED_WEIGHT = 3
 PICK_WEIGHT  = 2
+
+# Reproducibility + held-out validation (see dataset_utils.py). Conversations
+# from one story all go to the same side, so validation measures unseen stories.
+DATASET_SEED = 42
+VAL_FRACTION = 0.05
+VAL_PATH     = Path("output/chat_val.jsonl")
 
 # Dominant language signals — these paragraphs become USER turns (the player is dominant)
 DOMINANT_SIGNALS = re.compile(
@@ -312,12 +320,14 @@ def main():
     ]
     print(f"  {len(usable):,} usable stories (have text, ≥{MIN_WORDS} words, not disliked)")
 
+    random.seed(DATASET_SEED)   # shuffles below are reproducible
     random.shuffle(usable)
     if args.limit:
         usable = usable[:args.limit]
 
     # Extract
-    all_records = []
+    all_records, val_records = [], []
+    val_stories = 0
     skipped_low_dialogue = 0
     for story in usable:
         recs = process_story(story)
@@ -325,8 +335,13 @@ def main():
             skipped_low_dialogue += 1
             continue
 
-        # Apply preference weighting by repeating records
         sid = story.get("id", "")
+        if is_validation(sid, VAL_FRACTION, DATASET_SEED):
+            val_records.extend(recs)      # once, unweighted — it's a measurement
+            val_stories += 1
+            continue
+
+        # Apply preference weighting by repeating records
         w   = 1
         if sid in liked_ids:
             w = max(w, LIKED_WEIGHT)
@@ -364,8 +379,23 @@ def main():
         for rec in all_records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
+    with open(VAL_PATH, "w", encoding="utf-8") as f:
+        for rec in val_records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    write_manifest(
+        out.with_suffix(".manifest.json"),
+        outputs={"train": out, "val": VAL_PATH},
+        inputs={"index": INDEX_PATH, "preferences": PREFS_PATH},
+        settings={"dataset_seed": DATASET_SEED, "val_fraction": VAL_FRACTION,
+                  "min_words": MIN_WORDS, "min_dialogue_lines": MIN_DIALOGUE_LINES,
+                  "pairs": [MIN_PAIRS, MAX_PAIRS], "limit": args.limit},
+        counts={"train_records": len(all_records), "val_records": len(val_records),
+                "val_stories": val_stories},
+    )
+
     size_mb = out.stat().st_size / 1024 / 1024
     print(f"\nWritten to {out}  ({size_mb:.1f} MB)")
+    print(f"Validation: {val_stories:,} held-out stories, {len(val_records):,} conversations → {VAL_PATH}")
     print(f"\nNext: python train_chat.py --train")
 
 
