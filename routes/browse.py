@@ -45,6 +45,10 @@ def _filter_params():
 
 
 def _index_view():
+    """Shared view for / and /search: read every filter from the query string, run
+    search_stories(), and render index.html with the results, pagination, filter
+    options, and any filters detected in a natural-language query.
+    """
     state = current_app.state
     q            = request.args.get("q", "")
     cat          = request.args.get("cat", "")
@@ -118,16 +122,21 @@ def _index_view():
 
 @browse_bp.route("/")
 def index():
+    """Home page: search box, filter sidebar and results (same view as /search)."""
     return _index_view()
 
 
 @browse_bp.route("/search")
 def search():
+    """Search results page; identical to / so filter URLs can use either path."""
     return _index_view()
 
 
 @browse_bp.route("/tag/<tag_code>")
 def tag(tag_code):
+    """All stories with one mcstories.com category code (e.g. /tag/mf), sorted by title,
+    unpaginated.
+    """
     state = current_app.state
     results, total = search_stories(
         state, categories=[tag_code], sort="title", per_page=1000
@@ -154,6 +163,7 @@ def tag(tag_code):
 
 @browse_bp.route("/random")
 def random_story():
+    """Redirect to a random story that has text."""
     state = current_app.state
     pool = valid_stories(state)
     if not pool:

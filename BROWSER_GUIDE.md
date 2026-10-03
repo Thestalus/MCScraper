@@ -121,6 +121,15 @@ Templates use standard Jinja2. All templates inherit from `base.html` which prov
 
 Flask's `render_template()` is used throughout — templates live in the `templates/` folder and Flask finds them automatically.
 
+Helpers available in every template (registered in `app_factory.py`):
+
+| Helper | Use |
+|--------|-----|
+| `story_tags(s)` | A story's tags as a dict. **Always use this** — `s.auto_tags` can still be an unparsed JSON string for stories loaded from `stories_meta.db`. |
+| `visible_tags(tags, at)` | Drops low-quality classifier-only tags before display. |
+| `app_state` | The loaded `AppState` (used by `base.html` for the stale-metadata banner). |
+| `urlencode`, `slug_to_title`, `dt` (filters) | URL-encode a value; turn a story ID into a readable title; a story's display title. |
+
 ---
 
 ## Data flow for a search request
@@ -130,7 +139,7 @@ User request: GET /?q=hypnosis&tone=dark
 
 routes/browse.py  →  _index_view()
     reads request.args
-    calls parse_natural_query(q)         # services/search.py
+    calls parse_natural_query(q)         # search.py
     calls search_stories(state, ...)     # services/search_service.py
         → _fts_candidate_ids()           # FTS SQLite lookup
         → filter_score() per story       # tag/metadata filtering
@@ -176,7 +185,7 @@ routes/browse.py  →  _index_view()
 - `slug_to_title(slug)` — convert a URL slug to a human-readable title
 - `dt(ts)` — format a Unix timestamp as a date string
 
-### `services/search.py`
+### `search.py` (project root)
 
 - `parse_natural_query(q)` — scan a free-text query for tag phrases (e.g. "hypnosis dark romance" → mc_type=hypnosis, tone=dark/disturbing, theme=romance)
 - `pref_boost_score(story, tag_profile)` — score a story against a user's tag preference profile
@@ -259,13 +268,15 @@ See `tagger.py` and `CLASSIFIER_GUIDE.md` — the tagger runs separately from th
 
 ## Background threads
 
-The browser starts two background threads at startup:
+`load_data()` (in `services/data_store.py`) starts up to three daemon threads, after resolving every data path to an absolute path so they keep writing to the right folder:
 
-1. **Text cache builder** (`services/text_store.py:build_text_cache`) — reads full text from JSON and inserts it into `output/text_cache.db`. Fast on subsequent runs (skips already-cached stories).
+1. **Text cache builder** (`services/text_store.py:build_text_cache`) — copies story text from the index into `output/full_text_cache.db`. Skipped when the cache is newer than the index.
+2. **FTS warm-up** — runs one query against `output/search.db` so the first real search is fast.
+3. **Embedding builder** (`recommender.py:EmbeddingEngine.build_index`) — only when the recommendation cache is missing or stale. Loads (or computes) one numpy vector per story; vectors are cached in `output/recs_embeddings.npz` with a hash of the text they came from, so only new or changed stories are re-encoded.
 
-2. **Embedding builder** (`recommender.py:EmbeddingEngine.build_index`) — builds FAISS embedding vectors for similarity search. Only runs if `output/recs_cache.json` is missing or stale. Can take a few minutes for large collections.
+The recommendation cache (`recs_cache.json`) counts as stale when the index is newer than it, or when your likes, dislikes or hidden recommendations have changed since `make precalc-recs` — reading history does not affect it.
 
-Both are daemon threads and will not block server shutdown.
+`stories_meta.db` older than the index is still used (loading the 1 GB+ JSON instead would make every launch slow), but the console prints a warning and every page shows a banner. `make browse` rebuilds it automatically when it is out of date.
 
 ---
 
@@ -278,6 +289,7 @@ Both are daemon threads and will not block server shutdown.
 | Recommendations slow | Run `make precalc-recs` to pre-calculate |
 | Recommendations stale | Run `make precalc-recs` after adding new likes |
 | `stories_meta.db` missing | Run `make build-stories-db` for faster startup |
+| "Story metadata is out of date" banner | The index changed after `stories_meta.db` was built: `make build-stories-db` and restart (or just use `make browse`, which does it) |
 
 ---
 

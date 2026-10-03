@@ -179,6 +179,11 @@ def _load_full_text_cache(cache_path: str) -> dict:
 
 def build(index_path: str, db_path: str, text_cache_path: str,
           force: bool = False, no_fulltext: bool = False):
+    """Write search.db: a stories table, a tags table, and an FTS5 index over title,
+    author, description and tags (plus story text unless no_fulltext). Skips the rebuild
+    when search.db is newer than the index, unless force=True. Builds into a temp DB and
+    swaps it in, so a failed build leaves the old one usable.
+    """
     index_p = Path(index_path)
     db_p    = Path(db_path)
 
@@ -329,6 +334,7 @@ def build(index_path: str, db_path: str, text_cache_path: str,
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def main():
+    """Command-line entry point: --index, --db, --text-cache, --force, --no-fulltext."""
     p = argparse.ArgumentParser(description="Build FTS search database for MCScraper browser")
     p.add_argument("--index",    default=DEFAULT_INDEX,    help="Path to stories_index.json")
     p.add_argument("--db",       default=DEFAULT_DB,       help="Output path for search.db")

@@ -26,6 +26,9 @@ MCScraper/
 ├── recommender.py               Preferences + embedding-based recommendations
 ├── build_*_db.py                SQLite metadata and FTS search databases
 ├── train.py, train_chat.py      LLM fine-tuning data prep / training
+├── index_store.py               the only safe way to write stories_index.json (lock + atomic save)
+├── tag_utils.py, tag_trust.py   reading a story's tags; which tags are trusted for training
+├── dataset_utils.py             story-level validation splits and dataset manifests
 ├── tests.py                     pytest suite
 ├── Makefile                     All common commands (`make help`)
 └── output/                      Data folder or link to one (not in git)
@@ -124,6 +127,7 @@ After anything changes `stories_index.json`, run `make post-update` so the deriv
 
 | Guide | Covers |
 |-------|--------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | **Start here for the code**: what every script and data file is for, what reads and writes what, rules the code relies on |
 | [GUIDE.md](GUIDE.md) | Using the browser, updating, Wayback recovery, ingestion, tagging, maintenance |
 | [BROWSER_GUIDE.md](BROWSER_GUIDE.md) | Browser architecture: startup, AppState, routes, services, making changes |
 | [CLASSIFIER_GUIDE.md](CLASSIFIER_GUIDE.md) | Tag schema, tagging layers, trust tiers, audits |

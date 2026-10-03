@@ -121,6 +121,10 @@ def _bfloat16_supported() -> bool:
 
 
 def train(resume: bool = False):
+    """Train the chat LoRA on chat_data.jsonl with Unsloth (4-bit QLoRA), evaluating on
+    chat_val.jsonl when present. Checkpoints go to CONFIG['output_dir']; --resume
+    continues from the last one; final weights land in output_dir/final.
+    """
     try:
         from unsloth import FastLanguageModel
         from trl import SFTTrainer
@@ -289,6 +293,9 @@ def train(resume: bool = False):
 # ── Merge ──────────────────────────────────────────────────────────────────────
 
 def merge():
+    """Merge the trained LoRA (output_dir/final) into the base model and save the full
+    model to CONFIG['merged_dir'].
+    """
     try:
         from unsloth import FastLanguageModel
     except ImportError:
@@ -326,6 +333,9 @@ def merge():
 # ── Test ───────────────────────────────────────────────────────────────────────
 
 def test():
+    """Load the trained LoRA and print its replies to a few fixed RP prompts, for a quick
+    manual check.
+    """
     try:
         from unsloth import FastLanguageModel
     except ImportError:
@@ -399,6 +409,7 @@ def test():
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def main():
+    """Command-line entry point: --train [--resume], --merge, --test, --preset."""
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--train",  action="store_true", help="Run training")

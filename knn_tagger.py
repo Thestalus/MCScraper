@@ -2,6 +2,9 @@
 """
 knn_tagger.py — RAG-style tag inference via nearest-neighbour retrieval
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Experimental; its outputs (knn_svengali*, fulltext_pool*) are not used by the pipeline or the browser.
+
 Two complementary ideas, both using the sentence-transformer model already
 in tagger.py (all-MiniLM-L6-v2, 384-dim):
 

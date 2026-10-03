@@ -14,6 +14,7 @@ author_bp = Blueprint("author", __name__)
 
 @author_bp.route("/author/<author_name>")
 def author(author_name):
+    """All of one author's stories, sorted by title, with the user's follow status."""
     state = current_app.state
     author_stories = state.data.get("by_author", {}).get(author_name, [])
     author_stories = [s for s in author_stories if not s.get("fetch_error")]
@@ -28,12 +29,16 @@ def author(author_name):
 
 @author_bp.route("/authors")
 def authors():
+    """Every author with their story count."""
     state = current_app.state
     return render_template("authors.html", authors=get_all_authors(state))
 
 
 @author_bp.route("/author-similar/<path:author_name>")
 def author_similar(author_name):
+    """Authors whose stories are most similar to this author's (embedding-based; builds the
+    index on first use).
+    """
     state = current_app.state
     if not state.rec:
         abort(503)

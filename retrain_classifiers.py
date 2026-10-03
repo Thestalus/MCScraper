@@ -127,6 +127,10 @@ EXPANDED_TAGS = [
 
 
 def main():
+    """Retrain the per-tag SetFit classifiers on the existing embeddings (no encoder
+    fine-tune), save them, and optionally --eval on the held-out test split and/or --tag the
+    whole index (clearing old SetFit tags first).
+    """
     import argparse
     parser = argparse.ArgumentParser(description="Retrain SetFit classifiers (classifier phase only)")
     parser.add_argument("--eval",      action="store_true", help="Evaluate on held-out set after training")

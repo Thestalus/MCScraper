@@ -17,6 +17,9 @@ from services.data_store import load_data
 
 
 def main():
+    """Parse --index/--port/--host, load all data into an AppState, and run the Flask app.
+    `make browse` uses port 5003.
+    """
     parser = argparse.ArgumentParser(description="MC Archive local browser")
     parser.add_argument("--index", default="./output/stories_index.json",
                         help="Path to stories_index.json (default: ./output/stories_index.json)")

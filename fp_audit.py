@@ -2,6 +2,9 @@
 """
 fp_audit.py — Local Flask UI for auditing candidate false positives in story tags.
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Hand-labelling UI; its labels (fp_audit_results.jsonl) are SetFit training data and the basis of the trust tiers.
+
 Default data paths:
     input:  output/stories_index.json
     output: output/fp_audit_results.jsonl

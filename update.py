@@ -70,6 +70,7 @@ session.headers.update(HEADERS)
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 
 def get(url: str) -> BeautifulSoup | None:
+    """Fetch and parse a page, retrying with a growing delay; None if every attempt fails."""
     for attempt in range(MAX_RETRIES):
         try:
             r = session.get(url, timeout=20)
@@ -214,6 +215,7 @@ def load_existing_stories() -> dict[str, dict]:
 
 
 def load_existing_slugs() -> set[str]:
+    """IDs of every story already in the index."""
     return set(load_existing_stories().keys())
 
 
@@ -467,6 +469,9 @@ def run_setfit_tagging(output_dir: Path) -> bool:
 # ── Update log ────────────────────────────────────────────────────────────────
 
 def load_update_log() -> dict:
+    """Read output/update_log.json (a history of update runs; the browser's /new-stories
+    page shows the latest).
+    """
     if UPDATE_LOG.exists():
         with open(UPDATE_LOG, encoding="utf-8") as f:
             return json.load(f)
@@ -474,6 +479,7 @@ def load_update_log() -> dict:
 
 
 def save_update_log(log_data: dict):
+    """Write output/update_log.json."""
     with open(UPDATE_LOG, "w", encoding="utf-8") as f:
         json.dump(log_data, f, indent=2)
 
@@ -501,6 +507,13 @@ def _save_run_log(ok: int, err: int, added_to_index: int, setfit_ok: bool,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def run(args):
+    """One incremental update: 1) read candidate stories from mcstories.com's What's New
+    page; 2) split them into new stories and existing ones that may have new chapters
+    (wayback/local/manual stories are never touched); 3) fetch new stories in full and
+    check existing ones for new chapters; 4) merge both into the index (regex-tagged,
+    via index_store); 5) apply the SetFit classifiers; 6) record the run in
+    update_log.json.
+    """
     global OUTPUT_DIR, INDEX_PATH, UPDATE_LOG
 
     OUTPUT_DIR = Path(args.output)

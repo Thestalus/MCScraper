@@ -22,6 +22,7 @@ INDEX_FILE = Path("output/stories_index.json")
 
 
 def load_index(path: Path) -> list[dict]:
+    """Read the stories list from stories_index.json (read-only)."""
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return data["stories"]
@@ -31,6 +32,11 @@ def search(stories: list[dict], query: str = "", author: str = "",
            categories: list[str] = None, min_words: int = 0,
            themes: list[str] = None, mc_type: str = "",
            setting: str = "", tone: str = "", length_class: str = "") -> list[dict]:
+    """Filter stories: query is a case-insensitive substring of the title, description or
+    text; author is a substring; every category and theme given must be present; mc_type
+    must match a tag exactly (ignoring case); setting and tone match by substring.
+    Stories without text are skipped.
+    """
     q = query.lower()
     a = author.lower()
     cats = [c.lower() for c in (categories or [])]
@@ -78,6 +84,9 @@ def search(stories: list[dict], query: str = "", author: str = "",
 
 
 def print_story(s: dict, verbose: bool = False):
+    """Print one story's metadata and tags to the terminal (and a text preview when
+    verbose).
+    """
     print(f"\n{'─'*60}")
     print(f"  Title   : {s.get('title', '—')}")
     print(f"  Author  : {s.get('author', '—')}")
@@ -105,6 +114,7 @@ def print_story(s: dict, verbose: bool = False):
 
 
 def print_stats(stories: list[dict]):
+    """Print corpus totals: stories, authors, words, and the most common categories."""
     ok = [s for s in stories if not s.get("fetch_error") and s.get("full_text")]
     total_words = sum(s.get("word_count", 0) for s in ok)
     authors = {s.get("author") for s in ok}
@@ -130,6 +140,7 @@ def print_stats(stories: list[dict]):
 
 
 def interactive(stories: list[dict]):
+    """Terminal REPL: search <query> | author <name> | cat <tag> | stats | quit."""
     print("\n📚 mcstories local search")
     print("  Commands: search <query> | author <name> | cat <tag> | stats | quit\n")
     while True:
@@ -173,6 +184,7 @@ def interactive(stories: list[dict]):
 
 
 def main():
+    """Command-line entry point (see the module docstring for options)."""
     p = argparse.ArgumentParser(description="Search your local mcstories JSON index")
     p.add_argument("-i", "--index", default=str(INDEX_FILE),
                    help="Path to stories_index.json")

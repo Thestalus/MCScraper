@@ -15,6 +15,7 @@ generate_bp = Blueprint("generate", __name__)
 
 @generate_bp.route("/generate")
 def generate_page():
+    """Story generator page, with the tag dropdowns filled from the regex tagger's labels."""
     from tagger import (SETTING_RULES, THEME_RULES, TONE_RULES,
                         MIND_CONTROL_TYPE_RULES, DOMINANCE_RULES, PACING_RULES,
                         AWARENESS_RULES)

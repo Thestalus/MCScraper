@@ -28,6 +28,7 @@ BIBLES_DIR = Path("./output/bibles")
 # ── Data model ────────────────────────────────────────────────────────────────
 
 def empty_bible(title: str = "") -> dict:
+    """A new bible with every field present and empty; the ID is derived from the title."""
     return {
         "id":           _make_id(title),
         "title":        title,
@@ -66,6 +67,9 @@ def empty_bible(title: str = "") -> dict:
 
 
 def empty_character() -> dict:
+    """A blank character entry (name, role, description, motivation, arc, current state,
+    ...).
+    """
     return {
         "name":         "",
         "role":         "",     # protagonist / antagonist / supporting
@@ -86,6 +90,7 @@ def _make_id(title: str) -> str:
 # ── Storage ───────────────────────────────────────────────────────────────────
 
 def save_bible(bible: dict) -> Path:
+    """Write the bible to output/bibles/<id>.json, stamping updated_at. Returns the path."""
     BIBLES_DIR.mkdir(parents=True, exist_ok=True)
     bible["updated_at"] = datetime.now().isoformat()
     path = BIBLES_DIR / f"{bible['id']}.json"
@@ -94,6 +99,7 @@ def save_bible(bible: dict) -> Path:
 
 
 def load_bible(bible_id: str) -> Optional[dict]:
+    """The bible with this ID, or None if it doesn't exist."""
     path = BIBLES_DIR / f"{bible_id}.json"
     if not path.exists():
         return None
@@ -101,6 +107,7 @@ def load_bible(bible_id: str) -> Optional[dict]:
 
 
 def list_bibles() -> list[dict]:
+    """Summary of every bible (id, title, chapter count, ...), most recently edited first."""
     BIBLES_DIR.mkdir(parents=True, exist_ok=True)
     bibles = []
     for p in sorted(BIBLES_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -121,6 +128,7 @@ def list_bibles() -> list[dict]:
 
 
 def delete_bible(bible_id: str) -> bool:
+    """Delete a bible's file. Returns False if it didn't exist."""
     path = BIBLES_DIR / f"{bible_id}.json"
     if path.exists():
         path.unlink()

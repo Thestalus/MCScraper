@@ -16,6 +16,11 @@ story_bp = Blueprint("story", __name__)
 
 @story_bp.route("/story/<story_id>")
 def story(story_id):
+    """Story reader. Splits the text into chapters (HTML stories on <!-- BREAK --> markers;
+    plain-text stories on '* * *' lines, repairing soft line-wrap breaks and OCR double
+    spaces), then renders the chapter given by ?ch= along with the user's like/want
+    status and up to 4 similar stories.
+    """
     state = current_app.state
     s = state.data.get("by_id", {}).get(story_id)
     if not s:
@@ -64,6 +69,10 @@ def story(story_id):
 
 @story_bp.route("/similar/<story_id>")
 def similar(story_id):
+    """Stories similar to one story: from the precalculated recs cache when available,
+    otherwise computed live (building the embedding index on first use). Optional
+    ?min_words= / ?max_words= filters.
+    """
     state = current_app.state
     s = state.data.get("by_id", {}).get(story_id)
     if not s:

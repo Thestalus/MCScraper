@@ -284,6 +284,9 @@ def process_story(story: dict) -> list[dict]:
 
 
 def load_preferences() -> tuple[set, set]:
+    """(liked story IDs, disliked story IDs) from preferences.json; empty sets if the file
+    is missing.
+    """
     if not PREFS_PATH.exists():
         return set(), set()
     prefs = json.loads(PREFS_PATH.read_text())
@@ -291,6 +294,10 @@ def load_preferences() -> tuple[set, set]:
 
 
 def main():
+    """Filter usable stories (text, length, not disliked), turn each into chat
+    conversations, put validation stories aside, weight liked ones, and write
+    chat_data.jsonl, chat_val.jsonl and a manifest. --stats reports without writing.
+    """
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--limit",     type=int, default=None, help="Cap stories processed")

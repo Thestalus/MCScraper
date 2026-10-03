@@ -320,14 +320,21 @@ def parse_arc_response(response: str) -> Optional[dict]:
 # ── Main detection pipeline ───────────────────────────────────────────────────
 
 def load_index(for_write: bool = False) -> dict:
+    """Load the index; for_write=True takes the write lock (see index_store)."""
     return index_store.load_index(INDEX_PATH, for_write=for_write)
 
 
 def save_index(data: dict):
+    """Atomically save the index through index_store."""
     index_store.save_index(data, OUTPUT_PATH)
 
 
 def run(args):
+    """Arc-tag every story that doesn't have arc tags yet (or only failed ones with
+    --failed-only): build a prompt from the story's opening and ending, ask the local
+    LLM, store the parsed result under auto_tags['narrative_arc'], and checkpoint the
+    index every --checkpoint-every stories. Ctrl+C finishes the current story and saves.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-8s %(message)s",

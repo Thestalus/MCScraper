@@ -44,6 +44,7 @@ def _norm_author(s: str) -> str:
 
 
 def load_stories() -> list[dict]:
+    """Every story's id, title, author, URL and word count from stories_meta.db."""
     conn = sqlite3.connect(META_DB)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
@@ -84,6 +85,7 @@ def find_story(name: str, stories: list[dict]) -> dict | None:
 
 
 def get_full_text(story_id: str) -> str:
+    """A story's text from full_text_cache.db ('' if missing)."""
     conn = sqlite3.connect(TEXT_DB)
     row = conn.execute("SELECT full_text FROM texts WHERE id=?", (story_id,)).fetchone()
     conn.close()
@@ -91,6 +93,9 @@ def get_full_text(story_id: str) -> str:
 
 
 def main():
+    """Match the requested titles/ids/authors against the archive and write the stories
+    into one text file.
+    """
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("names", nargs="*", help="Story titles or ids to export")
     parser.add_argument("--from-file", "-f", help="Text file with one title/id per line")

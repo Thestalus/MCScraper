@@ -196,6 +196,7 @@ def _lines_to_paragraphs(lines: list[str]) -> list[str]:
 
 
 def paragraphs_to_html(paragraphs: list[str]) -> str:
+    """Wrap each non-empty paragraph in <p>, HTML-escaped."""
     return "\n".join(f"<p>{htmlmod.escape(p)}</p>" for p in paragraphs if p.strip())
 
 
@@ -323,6 +324,9 @@ class StoryData:
 
 
 def extract_txt(paths: list[Path]) -> StoryData:
+    """Read one or more .txt/.md files as a story: parses a StoriesOnline export header
+    for title/author/codes when present, and treats multiple files as chapters in the
+    order given."""
     sd = StoryData()
 
     if len(paths) == 1:
@@ -369,6 +373,9 @@ def extract_txt(paths: list[Path]) -> StoryData:
 
 
 def extract_pdf(paths: list[Path]) -> StoryData:
+    """Read PDF file(s) page by page with PyMuPDF (one story; multiple files become
+    chapters).
+    """
     if not _HAVE_FITZ:
         sys.exit("PyMuPDF not installed. Run: .venv/bin/pip install pymupdf")
     sd = StoryData()
@@ -388,6 +395,9 @@ def extract_pdf(paths: list[Path]) -> StoryData:
 
 
 def extract_epub(path: Path) -> StoryData:
+    """Read an EPUB: title/author from its Dublin Core metadata and chapters from its
+    reading order.
+    """
     if not _HAVE_BS4:
         sys.exit("BeautifulSoup4 not installed. Run: .venv/bin/pip install beautifulsoup4")
     if not zipfile.is_zipfile(path):
@@ -562,6 +572,7 @@ def extract_docx(paths: list[Path]) -> StoryData:
 
 
 def extract_images(paths: list[Path]) -> StoryData:
+    """OCR screenshots or scans with Tesseract, in file-name order, into one story."""
     try:
         import pytesseract
         from PIL import Image as _Image
@@ -988,6 +999,9 @@ def ingest_folder(folder: Path, default_author: str,
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    """Command-line entry point: ingest a file or folder, preview with --dry-run, add to
+    the index with --patch (see the module docstring for examples).
+    """
     p = argparse.ArgumentParser(
         description="Ingest local content (txt/epub/pdf/docx/image) into the MC Archive.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

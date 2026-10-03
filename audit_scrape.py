@@ -2,6 +2,9 @@
 """
 Audit mcstories scraper output.
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Diagnostic for scraper output; read-only.
+
 Usage:
     python3 audit_scrape.py
     python3 audit_scrape.py --output ./output

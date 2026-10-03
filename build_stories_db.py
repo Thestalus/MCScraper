@@ -51,6 +51,11 @@ CREATE INDEX IF NOT EXISTS idx_source     ON stories(source);
 
 
 def build(index_path: str, db_path: str, force: bool = False) -> None:
+    """Write stories_meta.db: every story's metadata and tags (as JSON text), without its
+    full text, so the browser starts in under a second. Skips the rebuild when the DB is
+    already newer than the index, unless force=True. Builds into a temp file and swaps
+    it in atomically.
+    """
     index_p = Path(index_path)
     db_p    = Path(db_path)
 

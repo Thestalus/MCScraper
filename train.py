@@ -546,6 +546,10 @@ class LossTracker:
         self._warned_plateau = False
 
     def on_log(self, step: int, loss: float):
+        """Record a training-loss point, print progress with ETA, warn after 5 logs without
+        a new best loss (and more strongly after 10), and redraw loss_curve.png every
+        100 steps.
+        """
         self.losses.append(loss)
         self.steps.append(step)
 
@@ -627,6 +631,7 @@ class LossTracker:
             pass  # don't crash training over a chart
 
     def final_summary(self):
+        """Print total time, best and final loss once training ends."""
         elapsed = time.time() - self.start_time
         hrs     = int(elapsed // 3600)
         mins    = int((elapsed % 3600) // 60)

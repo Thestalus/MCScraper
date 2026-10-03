@@ -2,6 +2,9 @@
 """
 auto_label.py — LLM-assisted TP/TN labeling for SetFit training data.
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Claude-assisted labelling into fp_audit_results.jsonl (SetFit training data). Needs ANTHROPIC_API_KEY.
+
 Uses Claude to classify candidate stories for each target tag, writing results
 to output/fp_audit_results.jsonl (same format as fp_audit.py / tp_audit.py).
 

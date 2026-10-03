@@ -2,6 +2,9 @@
 """
 fp_audit_auto_review.py
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Produced the March 2026 LLM-adjudicated audit in fp_audit_results.jsonl. Needs ANTHROPIC_API_KEY.
+
 Automated FP audit using Claude Haiku via the Anthropic API.
 Replaces the manual copy-paste-to-ChatGPT step.
 

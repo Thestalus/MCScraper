@@ -28,6 +28,9 @@ _AUTO_DIM_LABELS = {
 
 @meta_bp.route("/tags")
 def tags():
+    """Browse page for every mcstories category code and every auto-tag dimension with
+    counts.
+    """
     state = current_app.state
     cats, auto = get_all_tags(state)
     return render_template(
@@ -38,6 +41,9 @@ def tags():
 
 @meta_bp.route("/stats")
 def stats():
+    """Dataset statistics: story, author and word counts, multi-chapter stories, fetch
+    errors, top categories.
+    """
     state = current_app.state
     vs = valid_stories(state)
     total_words = sum(s.get("word_count", 0) for s in vs)
@@ -60,6 +66,10 @@ def stats():
 
 @meta_bp.route("/new-stories")
 def new_stories():
+    """Stories added or updated by the most recent `make update` run (from
+    update_log.json). Falls back to stories added since the user last opened this page,
+    tracked in preferences as last_seen_count.
+    """
     state = current_app.state
     update_log_path = Path(OUTPUT_DIR) / "update_log.json"
     runs = []
@@ -117,6 +127,9 @@ def new_stories():
 
 @meta_bp.route("/tag-stats")
 def tag_stats():
+    """Coverage of each auto-tag dimension across the corpus (how many stories carry each
+    tag).
+    """
     state = current_app.state
     stats = tag_coverage_stats(state.data.get("stories", []))
     return render_template("tag_stats.html", stats=stats)

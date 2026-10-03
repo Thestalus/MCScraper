@@ -15,6 +15,7 @@ prefs_bp = Blueprint("prefs", __name__)
 
 @prefs_bp.route("/liked")
 def liked():
+    """The user's liked stories and followed authors."""
     state = current_app.state
     if not state.prefs:
         abort(503)
@@ -31,6 +32,9 @@ def liked():
 
 @prefs_bp.route("/liked/export")
 def liked_export():
+    """Download liked stories as JSON (default), CSV (?fmt=csv) or a plain title list
+    (?fmt=txt).
+    """
     state = current_app.state
     if not state.prefs:
         abort(503)
@@ -83,6 +87,7 @@ def liked_export():
 
 @prefs_bp.route("/history")
 def history():
+    """The 100 most recently read stories with the last chapter reached, newest first."""
     state = current_app.state
     if not state.prefs:
         abort(503)
@@ -97,6 +102,7 @@ def history():
 
 @prefs_bp.route("/want-to-read")
 def want_to_read():
+    """Stories bookmarked to read later."""
     state = current_app.state
     if not state.prefs:
         abort(503)
@@ -107,6 +113,10 @@ def want_to_read():
 
 @prefs_bp.route("/recommendations")
 def recommendations():
+    """'For You' page. Uses the precalculated personalised list when the recs cache is
+    fresh (minus hidden recommendations); otherwise ranks live against the user's taste
+    profile. ?shuffle=1 randomises the order.
+    """
     state = current_app.state
     if not state.rec:
         abort(503)

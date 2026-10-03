@@ -33,6 +33,7 @@ def is_validation(story_id: str, fraction: float, seed: int) -> bool:
 
 
 def file_sha256(path) -> str | None:
+    """SHA-256 of a file's contents, or None if it doesn't exist."""
     path = Path(path)
     if not path.exists():
         return None
@@ -54,6 +55,9 @@ def file_fingerprint(path) -> dict | None:
 
 
 def git_commit() -> str | None:
+    """Short commit hash of the project, with '-dirty' if tracked files have uncommitted
+    changes; None outside git.
+    """
     try:
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=PROJECT_DIR,
                              capture_output=True, text=True, timeout=10)
@@ -68,6 +72,7 @@ def git_commit() -> str | None:
 
 def package_versions(names=("torch", "transformers", "trl", "peft", "unsloth",
                             "datasets", "accelerate", "bitsandbytes")) -> dict:
+    """Installed versions of the training stack (missing packages are left out)."""
     versions = {}
     for name in names:
         try:

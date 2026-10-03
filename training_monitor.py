@@ -188,6 +188,9 @@ class TrainingMonitor:
 
 
 def main():
+    """Open the monitor window and run the given training command inside it (default:
+    setfit_trainer.py --train).
+    """
     parser = argparse.ArgumentParser(description="Training monitor GUI")
     parser.add_argument("--cmd", type=str, default=None,
                         help="Shell command string to run (e.g. 'py -3.11 setfit_trainer.py --train')")

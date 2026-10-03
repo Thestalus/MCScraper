@@ -39,6 +39,9 @@ def api_search():
 
 @api_bp.route("/api/like/<story_id>", methods=["POST"])
 def api_like(story_id):
+    """Set a story's like status from the JSON body: {"status": "liked" | "disliked" |
+    anything else to clear}.
+    """
     state  = current_app.state
     if not state.prefs:
         return jsonify({"ok": False, "error": "preferences not loaded"})
@@ -55,6 +58,9 @@ def api_like(story_id):
 
 @api_bp.route("/api/like-author/<path:author_name>", methods=["POST"])
 def api_like_author(author_name):
+    """Follow, dislike or clear an author: {"status": "liked" | "disliked" | anything else
+    to clear}.
+    """
     state  = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})
@@ -71,6 +77,7 @@ def api_like_author(author_name):
 
 @api_bp.route("/api/dismiss-rec/<story_id>", methods=["POST"])
 def api_dismiss_rec(story_id):
+    """Hide a story from the 'For You' recommendations."""
     state = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})
@@ -80,6 +87,7 @@ def api_dismiss_rec(story_id):
 
 @api_bp.route("/api/restore-dismissed", methods=["POST"])
 def api_restore_dismissed():
+    """Un-hide every dismissed recommendation."""
     state = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})
@@ -89,6 +97,7 @@ def api_restore_dismissed():
 
 @api_bp.route("/api/want/<story_id>", methods=["POST"])
 def api_want(story_id):
+    """Add ({"wanted": true}) or remove a story from the want-to-read list."""
     state  = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})
@@ -103,6 +112,9 @@ def api_want(story_id):
 
 @api_bp.route("/api/preview/<story_id>")
 def api_preview(story_id):
+    """First ~700 characters of a story as plain text, for the inline preview on story
+    cards.
+    """
     state = current_app.state
     s = state.data.get("by_id", {}).get(story_id)
     if not s:
@@ -116,6 +128,7 @@ def api_preview(story_id):
 
 @api_bp.route("/api/history/<story_id>", methods=["POST"])
 def api_history(story_id):
+    """Record that the user read a story up to a chapter: {"chapter": n, "total": m}."""
     state   = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})

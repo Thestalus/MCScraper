@@ -2,6 +2,9 @@
 """
 fp_audit_dashboard.py
 
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Read-only summary of fp_audit_results.jsonl.
+
 Small terminal dashboard for false-positive audit results.
 
 Reads:

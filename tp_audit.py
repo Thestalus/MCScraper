@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 tp_audit.py — Flask UI for TP mining: find true-positive training examples
+
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Hand-labelling UI for true positives; writes to fp_audit_results.jsonl (SetFit training data).
 for tags that lack Svengali labels.
 
 The existing fp_audit already collected ~18–37 confirmed TN (FALSE_POSITIVE)

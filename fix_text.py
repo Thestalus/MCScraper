@@ -326,6 +326,10 @@ def _show_diff(story_id: str, old: str, new: str) -> None:
 
 
 def main():
+    """Apply the text clean-up rules to every story's full_text (or one --story), report
+    what changed, save through index_store unless --dry-run, and refresh
+    full_text_cache.db.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", default="./output/stories_index.json")
     parser.add_argument("--dry-run", action="store_true",

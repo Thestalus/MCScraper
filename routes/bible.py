@@ -18,11 +18,13 @@ bible_bp = Blueprint("bible", __name__)
 
 @bible_bp.route("/bibles")
 def bibles():
+    """List every story bible."""
     return render_template("bibles/list.html", bibles=list_bibles())
 
 
 @bible_bp.route("/bibles/new", methods=["GET", "POST"])
 def bible_new():
+    """Create a story bible: show the empty form, or save it on POST."""
     if request.method == "POST":
         return _save_bible_form(None)
     return render_template("bibles/edit.html", bible=empty_bible())
@@ -30,11 +32,13 @@ def bible_new():
 
 @bible_bp.route("/bibles/<bible_id>")
 def bible_detail(bible_id):
+    """A bible's main page is its write page; redirect there."""
     return redirect(f"/bibles/{bible_id}/write")
 
 
 @bible_bp.route("/bibles/<bible_id>/edit", methods=["GET", "POST"])
 def bible_edit(bible_id):
+    """Edit a bible's premise, setting, characters and threads; saves on POST."""
     if request.method == "POST":
         return _save_bible_form(bible_id)
     bible = load_bible(bible_id)
@@ -76,12 +80,14 @@ def _save_bible_form(bible_id):
 
 @bible_bp.route("/bibles/<bible_id>/delete", methods=["POST"])
 def bible_delete(bible_id):
+    """Delete a bible (its JSON file in output/bibles/)."""
     delete_bible(bible_id)
     return jsonify({"ok": True})
 
 
 @bible_bp.route("/bibles/<bible_id>/write")
 def bible_write(bible_id):
+    """Writing page for the next chapter of a bible."""
     bible = load_bible(bible_id)
     if not bible:
         abort(404)
@@ -91,6 +97,7 @@ def bible_write(bible_id):
 
 @bible_bp.route("/bibles/<bible_id>/read")
 def bible_read(bible_id):
+    """Read every generated chapter of a bible in order."""
     bible = load_bible(bible_id)
     if not bible:
         abort(404)
@@ -102,6 +109,10 @@ def bible_read(bible_id):
 
 @bible_bp.route("/api/bible/write", methods=["POST"])
 def api_bible_write():
+    """Stream the next chapter from the local LLM, prompted with the whole bible plus the
+    user's instruction. Returns plain text as it is generated; 503 if the LLM server
+    isn't reachable.
+    """
     from generator import LLMClient
     data  = request.get_json(force=True)
     bible = load_bible(data.get("bible_id", ""))
@@ -138,6 +149,9 @@ def api_bible_write():
 
 @bible_bp.route("/api/bible/summarise", methods=["POST"])
 def api_bible_summarise():
+    """Ask the local LLM for a short summary of a chapter, to store in the bible's chapter
+    list.
+    """
     from generator import LLMClient
     data        = request.get_json(force=True)
     text        = data.get("text", "")
@@ -154,6 +168,9 @@ def api_bible_summarise():
 
 @bible_bp.route("/api/bible/save-chapter", methods=["POST"])
 def api_bible_save_chapter():
+    """Append a finished chapter to the bible: its summary to `chapters` and its full text
+    to `generated`.
+    """
     import datetime
     data     = request.get_json(force=True)
     bible_id = data.get("bible_id", "")

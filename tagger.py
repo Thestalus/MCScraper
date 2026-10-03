@@ -641,6 +641,9 @@ POV_PATTERNS = [
 
 
 def classify_length(word_count: int) -> str:
+    """Length class from a word count: flash (<1k), short story (<7.5k), novelette
+    (<17.5k), novella (<40k), novel.
+    """
     if word_count < 1000:   return "flash"
     if word_count < 7500:   return "short story"
     if word_count < 17500:  return "novelette"
@@ -649,6 +652,9 @@ def classify_length(word_count: int) -> str:
 
 
 def detect_pov(text: str) -> str:
+    """First, second or third person, by which pronoun pattern is most common in the first
+    3,000 characters; 'unknown' if the winner has fewer than 5 hits.
+    """
     if not text:
         return "unknown"
     sample = text[:3000]
@@ -658,6 +664,9 @@ def detect_pov(text: str) -> str:
 
 
 def apply_rules(text: str, rules: RuleList) -> list[str]:
+    """Labels whose regex matches the text at least min_n times (the third element of each
+    rule).
+    """
     results = []
     for label, pat, min_n in rules:
         if min_n == 1:
@@ -676,6 +685,10 @@ def apply_rules(text: str, rules: RuleList) -> list[str]:
 
 
 def expand_site_tags(raw_tags: list[str]) -> dict[str, list[str]]:
+    """Turn mcstories.com category codes (mc, mf, fd, ...) into readable labels plus the
+    groups they belong to (sex_act, gender_dynamic, kink, genre, content_flag). Unknown
+    codes are ignored.
+    """
     expanded, groups = [], set()
     for tag in raw_tags:
         t = tag.lower().strip()

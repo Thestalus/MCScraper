@@ -77,6 +77,9 @@ session = requests.Session()
 session.headers.update(HEADERS)
 
 def get(url: str) -> Optional[BeautifulSoup]:
+    """Fetch a page and parse it, retrying MAX_RETRIES times with a growing delay. Returns
+    None if every attempt fails.
+    """
     for attempt in range(MAX_RETRIES):
         try:
             r = session.get(url, timeout=20)
@@ -91,6 +94,9 @@ def get(url: str) -> Optional[BeautifulSoup]:
 # ─── Level 1: Titles/index.html → letter page URLs ───────────────────────────
 
 def get_letter_urls() -> list[str]:
+    """Level 1: the per-letter title pages (A.html, B.html, ...) linked from
+    Titles/index.html.
+    """
     soup = get(TITLES_INDEX)
     if not soup:
         log.error("Could not fetch Titles index")
@@ -112,6 +118,9 @@ def get_letter_urls() -> list[str]:
 # ─── Level 2: letter page → story landing URLs ────────────────────────────────
 
 def get_story_urls_from_letter(letter_url: str) -> list[str]:
+    """Level 2: every story landing page (https://mcstories.com/<Story>/index.html) linked
+    from one letter page.
+    """
     soup = get(letter_url)
     if not soup:
         return []
@@ -277,6 +286,10 @@ def _extract_html(body) -> str:
 
 
 def fetch_chapter_text(url: str) -> str:
+    """Download one chapter and return its text as cleaned HTML, from the <article
+    id="mcstories"> block (or older layouts' equivalents), falling back to the <p>/<hr>
+    tags after the first heading. Returns '' if the page can't be fetched.
+    """
     soup = get(url)
     if not soup:
         log.warning(f"  Could not fetch chapter: {url}")
@@ -345,6 +358,9 @@ def fetch_full_story(landing_url: str) -> dict:
 # ─── Training format builders ─────────────────────────────────────────────────
 
 def to_raw_pretraining(story: Story) -> dict:
+    """Training-export record: a metadata header (title, author, trusted tags, summary)
+    followed by the plain story text.
+    """
     at    = export_tags(story.auto_tags)
     parts = [f"Title: {story.title}", f"Author: {story.author}"]
     if story.categories:              parts.append(f"Categories: {', '.join(story.categories)}")
@@ -359,6 +375,9 @@ def to_raw_pretraining(story: Story) -> dict:
 
 
 def to_instruction_response(story: Story) -> dict:
+    """Training-export record in chat format: a 'write a story titled X with these trusted
+    tags' request and the story as the reply.
+    """
     at      = export_tags(story.auto_tags)
     cats    = ", ".join(story.categories) if story.categories else "fiction"
     themes  = ", ".join(at.get("themes", []))
@@ -378,6 +397,7 @@ def to_instruction_response(story: Story) -> dict:
 
 
 def to_completion(story: Story) -> dict:
+    """Training-export record as a prompt (metadata header) / completion (story text) pair."""
     at    = export_tags(story.auto_tags)
     cats  = ", ".join(story.categories) if story.categories else "fiction"
     parts = [f"Title: {story.title}", f"Author: {story.author}", f"Categories: {cats}"]
@@ -387,12 +407,19 @@ def to_completion(story: Story) -> dict:
 
 
 def make_id(landing_url: str) -> str:
+    """Story ID from its landing URL: the path segment, e.g.
+    .../TheWillingCanvas/index.html -> 'TheWillingCanvas'.
+    """
     return urlparse(landing_url).path.strip("/").split("/")[0]
 
 
 # ─── Main pipeline ────────────────────────────────────────────────────────────
 
 def run(args):
+    """Full scrape: collect every story URL, skip ones already in the index (unless
+    --no-resume), fetch and tag the rest, append them to the training exports, and save
+    the index every CHECKPOINT_EVERY (50) stories through index_store.
+    """
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
 

@@ -98,6 +98,11 @@ def fetch_story_text(story: dict) -> tuple[str, int, str | None]:
 
 
 def main():
+    """Re-download the text of live-site stories (all, one --story, or --limit N; --resume
+    skips stories already refreshed) with the current HTML extractor and save through
+    index_store. Wayback, local and manual stories are never touched, and a story keeps
+    its old text when a chapter can't be fetched.
+    """
     parser = argparse.ArgumentParser(description="Re-fetch story text with fixed HTML extractor")
     parser.add_argument("--index",   default="./output/stories_index.json")
     parser.add_argument("--dry-run", action="store_true",

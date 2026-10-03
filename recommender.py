@@ -61,6 +61,10 @@ class EmbeddingEngine:
         self._build_lock = threading.Lock()
 
     def _try_load_model(self):
+        """Load the all-MiniLM-L6-v2 sentence-transformer (once per process, shared by
+        every engine). Sets semantic=False when sentence-transformers isn't installed,
+        which switches the engine to tag-overlap vectors.
+        """
         global _shared_model
         try:
             from sentence_transformers import SentenceTransformer
@@ -116,6 +120,11 @@ class EmbeddingEngine:
             self._build_index(stories, cache_path)
 
     def _build_index(self, stories: list[dict], cache_path: "Path | None"):
+        """Compute a vector for every story with text. Semantic mode encodes each story's
+        signature (title, description, categories, tags, arc) and reuses cached vectors
+        whose signature hash is unchanged; tag-overlap mode builds normalised
+        tag-frequency vectors instead. Call through build_index(), which holds the lock.
+        """
         self._try_load_model()
         valid = [s for s in stories if not s.get("fetch_error") and s.get("_has_text", s.get("full_text"))]
         log.info(f"Building recommendation index for {len(valid)} stories...")
@@ -209,6 +218,9 @@ class EmbeddingEngine:
             return dot / (na * nb + 1e-9)
 
     def vec(self, story_id: str) -> Optional[list]:
+        """The story's vector (numpy array, or a {token: weight} dict in tag-overlap mode),
+        or None if it has no text.
+        """
         return self._embeddings.get(story_id)
 
     def mean_vec(self, story_ids: list[str]):
@@ -294,6 +306,9 @@ class PreferenceStore:
         self._load()
 
     def _load(self):
+        """Read preferences.json, adding any keys missing from older files. A corrupt file
+        is logged and the defaults are kept.
+        """
         if self.path.exists():
             try:
                 self.data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -339,6 +354,7 @@ class PreferenceStore:
 
     @_locked
     def hide_rec(self, story_id: str):
+        """Hide a story from personalised recommendations (the 'dismiss' button)."""
         if story_id not in self.data["hidden_recs"]:
             self.data["hidden_recs"].append(story_id)
         self._save()
@@ -351,6 +367,7 @@ class PreferenceStore:
 
     @_locked
     def like_story(self, story_id: str, note: str = ""):
+        """Like a story (clearing any dislike), optionally storing a personal note."""
         if story_id not in self.data["liked_stories"]:
             self.data["liked_stories"].append(story_id)
         if story_id in self.data["disliked_stories"]:
@@ -361,6 +378,9 @@ class PreferenceStore:
 
     @_locked
     def dislike_story(self, story_id: str):
+        """Dislike a story (clearing any like). Disliked stories are excluded from
+        recommendations and training data.
+        """
         if story_id not in self.data["disliked_stories"]:
             self.data["disliked_stories"].append(story_id)
         if story_id in self.data["liked_stories"]:
@@ -369,6 +389,7 @@ class PreferenceStore:
 
     @_locked
     def unlike_story(self, story_id: str):
+        """Clear both like and dislike for a story."""
         for lst in ("liked_stories", "disliked_stories"):
             if story_id in self.data[lst]:
                 self.data[lst].remove(story_id)
@@ -376,6 +397,7 @@ class PreferenceStore:
 
     @_locked
     def like_author(self, author: str):
+        """Follow an author (clearing any dislike)."""
         if author not in self.data["liked_authors"]:
             self.data["liked_authors"].append(author)
         if author in self.data["disliked_authors"]:
@@ -384,6 +406,9 @@ class PreferenceStore:
 
     @_locked
     def dislike_author(self, author: str):
+        """Dislike an author (clearing any follow); their stories are excluded from
+        recommendations.
+        """
         if author not in self.data["disliked_authors"]:
             self.data["disliked_authors"].append(author)
         if author in self.data["liked_authors"]:
@@ -399,6 +424,9 @@ class PreferenceStore:
 
     @_locked
     def record_visit(self, story_id: str, chapter: int, total: int):
+        """Remember the furthest chapter read in a story: {last_chapter, total, ts (unix
+        time)}.
+        """
         import time
         self.data["history"][story_id] = {
             "last_chapter": chapter,
@@ -408,25 +436,30 @@ class PreferenceStore:
         self._save()
 
     def visit_info(self, story_id: str):
+        """The story's history entry ({last_chapter, total, ts}) or None."""
         return self.data["history"].get(story_id)
 
     @property
     def visited_stories(self):
+        """[(story_id, history entry)] sorted newest first."""
         h = self.data.get("history", {})
         return sorted(h.items(), key=lambda x: x[1]["ts"], reverse=True)
 
     def story_status(self, story_id: str) -> str:
+        """'liked', 'disliked' or 'none'."""
         if story_id in self.data["liked_stories"]:    return "liked"
         if story_id in self.data["disliked_stories"]: return "disliked"
         return "none"
 
     def author_status(self, author: str) -> str:
+        """'liked' (followed), 'disliked' or 'none'."""
         if author in self.data["liked_authors"]:    return "liked"
         if author in self.data["disliked_authors"]: return "disliked"
         return "none"
 
     @_locked
     def want_story(self, story_id: str):
+        """Add a story to the want-to-read list."""
         lst = self.data.setdefault("want_to_read", [])
         if story_id not in lst:
             lst.append(story_id)

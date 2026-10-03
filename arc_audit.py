@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 arc_audit.py — Audit narrative arc tag accuracy by comparing Dolphin's output
+
+Status: research/audit tool, not part of the regular pipeline (see ARCHITECTURE.md).
+Measures narrative_arc.py's accuracy against Claude; writes arc_audit_results.jsonl.
 against Claude Haiku under two context conditions.
 
 For each sampled story, Claude assigns arc tags independently (blind — it does

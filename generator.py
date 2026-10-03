@@ -44,6 +44,9 @@ class LLMClient:
         self._models_cache: list[str] = []
 
     def list_models(self) -> list[str]:
+        """Model names offered by the server's /models endpoint (cached after the first
+        call; [] if unreachable).
+        """
         if self._models_cache:
             return self._models_cache
         try:
@@ -62,6 +65,7 @@ class LLMClient:
             return []
 
     def resolve_model(self) -> str:
+        """The configured model, or the server's first model when set to 'auto'."""
         if self.model and self.model != "auto":
             return self.model
         models = self.list_models()
@@ -69,6 +73,9 @@ class LLMClient:
 
     def complete(self, messages: list[dict], max_tokens: int = 2000,
                  temperature: float = 0.85, stream: bool = False) -> str | Iterator[str]:
+        """Send a chat completion. Returns the reply text, or with stream=True an iterator
+        of text chunks as they arrive.
+        """
         model = self.resolve_model()
         payload = {
             "model":       model,
@@ -111,6 +118,7 @@ class LLMClient:
                     pass
 
     def ping(self) -> bool:
+        """True if the server answers /models without a server error."""
         try:
             r = requests.get(f"{self.base_url}/models", timeout=3,
                              headers={"Authorization": f"Bearer {self.api_key}"})
@@ -226,6 +234,7 @@ def build_prompt(request_text: str, examples: list[dict],
 # ── Token/word estimate ───────────────────────────────────────────────────────
 
 def estimate_tokens(length_class: str) -> int:
+    """Rough output-token budget for a story of the given length class."""
     return {
         "flash":      800,
         "short story": 3000,

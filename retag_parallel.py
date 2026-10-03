@@ -34,6 +34,11 @@ def parallel_regex_tag(stories: list, chunksize: int = 200) -> dict:
 
 
 def main():
+    """Re-run the regex tagger on every story with text across all CPU cores and save
+    through index_store. Regex-only dimensions are replaced outright; in the other
+    dimensions, tags from Svengali and SetFit are kept and only the 'regex' sources are
+    rebuilt.
+    """
     print("Loading index...")
     data = index_store.load_index(INDEX_PATH, for_write=True)
 
