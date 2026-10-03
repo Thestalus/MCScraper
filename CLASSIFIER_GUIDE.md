@@ -1,5 +1,7 @@
 # MCScraper — Classifier & Tagging System Guide
 
+> **Reading the numbers in this guide.** Scores here come from different kinds of evidence — LLM-adjudicated audits, Svengali agreement, out-of-fold (OOF) cross-validation — and are not interchangeable; see [Evidence terms](ARCHITECTURE.md#evidence-terms). OOF F1 figures from before 2026-10-03 are optimistic: the SetFit encoder was fine-tuned on the same stories they were measured on. Since then `setfit_trainer.py --eval` reports a held-out test split (story-level 70/15/15 train/val/test). A read-only rerun on that split gave a mean F1 of 0.413 vs 0.450 OOF across 20 tags; weak tags fell most (e.g. `addiction / need` 0.301 → 0.151) while strong ones held (`obedience programming` 0.704 → 0.707). Trust tiers live in `tag_trust.py`, not in this document.
+
 ---
 
 ## FP Audit — Full Results (March 2026)

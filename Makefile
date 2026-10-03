@@ -131,12 +131,9 @@ check: install
 		|| echo "  sentence-transformers   NOT installed  (run: make install-semantic)"
 	@echo ""
 	@echo "$(BOLD)Checking scripts...$(RESET)"
-	@for f in scraper.py tagger.py search_stories.py estimate_size.py tests.py conftest.py; do \
-		if [ -f "$(PROJECT_DIR)/$$f" ]; then \
-			$(PY) -c "import ast; ast.parse(open('$(PROJECT_DIR)/$$f').read()); print('  ' + '$$f'.ljust(22) + 'OK')"; \
-		else \
-			echo "  $$f$(shell printf '%*s' $$((22 - $${#f})) '')MISSING (copy from repo)"; \
-		fi; \
+	@cd $(PROJECT_DIR) && for f in *.py routes/*.py services/*.py; do \
+		$(PY) -c "import ast,sys; ast.parse(open('$$f').read())" 2>/dev/null \
+			&& echo "  $$f OK" || echo "  $$f SYNTAX ERROR"; \
 	done
 	@echo "$(GREEN)✓ Check complete$(RESET)"
 
@@ -148,24 +145,24 @@ check: install
 .PHONY: probe
 probe: install
 	@echo "$(BOLD)Probing mcstories.com URL structure...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) probe_site.py --follow
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/probe_site.py --follow
 
 .PHONY: estimate
 estimate: install
 	@echo "$(BOLD)Estimating dataset size (sampling 30 stories)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) estimate_size.py --sample 30
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/estimate_size.py --sample 30
 
 .PHONY: estimate-large
 estimate-large: install
 	@echo "$(BOLD)Estimating dataset size (sampling 100 stories for accuracy)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) estimate_size.py --sample 100
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/estimate_size.py --sample 100
 
 .PHONY: estimate-from-index
 estimate-from-index:
 	@if [ ! -f "$(INDEX)" ]; then \
 		echo "No index yet — run make scrape first."; exit 1; fi
 	@echo "$(BOLD)Reporting exact sizes from local index...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) estimate_size.py --from-index --index $(INDEX)
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/estimate_size.py --from-index --index $(INDEX)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -478,32 +475,32 @@ svengali-scrape-test: install
 .PHONY: import-aiden
 import-aiden: install
 	@echo "$(BOLD)Importing Aiden PDF stories into index...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_stories.py
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_stories.py
 
 .PHONY: import-aiden-update
 import-aiden-update: install
 	@echo "$(BOLD)Importing Aiden PDF stories (with full-text update)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_stories.py --update-existing
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_stories.py --update-existing
 
 .PHONY: import-aiden-dry
 import-aiden-dry: install
 	@echo "$(BOLD)Dry run — previewing Aiden import...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_stories.py --dry-run
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_stories.py --dry-run
 
 .PHONY: import-mindspark
 import-mindspark: install
 	@echo "$(BOLD)Importing MindSpark PDF stories into index...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_mindspark.py
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_mindspark.py
 
 .PHONY: import-mindspark-update
 import-mindspark-update: install
 	@echo "$(BOLD)Importing MindSpark PDF stories (with full-text update)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_mindspark.py --update-existing
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_mindspark.py --update-existing
 
 .PHONY: import-mindspark-dry
 import-mindspark-dry: install
 	@echo "$(BOLD)Dry run — previewing MindSpark import...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) import_local_mindspark.py --dry-run
+	cd $(PROJECT_DIR) && PYTHONPATH=$(PROJECT_DIR) $(PY) old/import_local_mindspark.py --dry-run
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

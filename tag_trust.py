@@ -31,7 +31,8 @@ AND_GATE_TAGS = frozenset({
     "chemical",          # mc_type  — F1=0.380
     "memory alteration", # mental   — F1=0.440
     "identity loss",     # mental   — F1=0.523
-    "leisurely",         # pacing   — F1=0.625
+    "leisurely",         # pacing   — F1=0.625 (classifier alone is unusable — see
+                         # services/tag_service.py LOW_QUALITY_SETFIT_TAGS — so only the AND-gate is trusted)
     "anal",              # sexual   — F1=0.402
     "toys",              # sexual   — F1=0.450
 })

@@ -7,6 +7,8 @@
 > **Primary hardware:** RTX 3070 Ti 8 GB (Windows), Mac M4 16 GB
 > **Current recommended target:** 12B fine-tuned (Magnum or Dolphin Nemo), Q4_K_S on 3070 Ti
 > **Validated environment:** NOT YET VALIDATED end-to-end on 12B — see Known Facts section
+> **What the code does today:** `train.py` defaults to `cognitivecomputations/dolphin3.0-llama3.1-8b`; `train_chat.py` defaults to `Vdr1/L3-8B-Sunfall-v0.5-Stheno-v3.2` (2,048-token context, LoRA rank 8). The 12B target above is the plan, not the code default — before a 12B run, add a dedicated preset, check the chat template and Unsloth support, measure VRAM, and update this guide only after it works.
+> **Datasets:** both scripts now write a story-level validation file and a `.manifest.json` (seed, split, input fingerprints, file hashes) next to the training data, and report validation loss during training. See [ARCHITECTURE.md](ARCHITECTURE.md#evidence-terms) for how to label scores.
 
 ---
 

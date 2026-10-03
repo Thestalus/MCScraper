@@ -7,6 +7,8 @@ from __future__ import annotations
 # community data also backs them (i.e. 'svengali' in _tag_sources[tag]).
 LOW_QUALITY_SETFIT_TAGS = frozenset({
     # Pacing — BROKEN: classifier tags 88–98% of all stories
+    # 'leisurely' is also AND-gated in tag_trust.py (trusted for training only when
+    # regex agrees); the classifier alone is what's broken. Keep the two in sync.
     'rapid', 'leisurely',
     # Mind control type — F1 < 0.30
     'possession',          # F1=0.288
