@@ -43,6 +43,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 import requests
+import index_store
 
 log = logging.getLogger(__name__)
 
@@ -833,8 +834,7 @@ def import_tags(index_path: Path, raw_path: Path,
 
     # Load main index
     log.info(f"Loading {index_path}...")
-    with open(index_path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = index_store.load_index(index_path, for_write=not dry_run)
 
     stories = data.get("stories", [])
     log.info(f"Main index: {len(stories):,} stories")
@@ -913,18 +913,9 @@ def import_tags(index_path: Path, raw_path: Path,
         log.info("Nothing to update.")
         return
 
-    # Save
-    tmp = index_path.with_suffix(".tmp")
-    log.info(f"\nSaving {len(stories):,} stories to {tmp}...")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    # Validate
-    with open(tmp, encoding="utf-8") as f:
-        check = json.load(f)
-    assert len(check["stories"]) == len(stories), "Story count mismatch"
-
-    tmp.replace(index_path)
+    # Save (validated: re-reads the written file and checks the story count)
+    log.info(f"\nSaving {len(stories):,} stories to {index_path}...")
+    index_store.save_index(data, index_path, validate=True)
     log.info(f"Saved to {index_path}")
     log.info("Run: make rebuild-jsonl   to update training files")
 

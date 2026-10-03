@@ -102,8 +102,7 @@ def new_stories():
         last_seen = state.prefs.data.get("last_seen_count", 0) if state.prefs else 0
         new = [(s, None) for s in (all_valid[last_seen:] if last_seen < len(all_valid) else [])]
         if state.prefs and new:
-            state.prefs.data["last_seen_count"] = len(all_valid)
-            state.prefs._save()
+            state.prefs.set_value("last_seen_count", len(all_valid))
 
     scrape_date = state.data.get("last_updated", state.data.get("scraped_at", ""))[:10] if state.data else ""
     last_run    = runs[-1]["timestamp"][:10] if runs else ""

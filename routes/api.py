@@ -83,8 +83,7 @@ def api_restore_dismissed():
     state = current_app.state
     if not state.prefs:
         return jsonify({"ok": False})
-    state.prefs.data["hidden_recs"] = []
-    state.prefs._save()
+    state.prefs.set_value("hidden_recs", [])
     return jsonify({"ok": True})
 
 

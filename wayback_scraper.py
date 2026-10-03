@@ -43,6 +43,7 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
+import index_store
 from bs4 import BeautifulSoup
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -712,8 +713,7 @@ def merge_into_main(dry_run: bool = False):
 
     # Load main index fully — safe approach
     print(f"Loading main index...")
-    with open(MAIN_INDEX, encoding="utf-8") as f:
-        main_data = json.load(f)
+    main_data = index_store.load_index(MAIN_INDEX, for_write=not dry_run)
 
     existing_ids = {s["id"] for s in main_data.get("stories", [])}
     print(f"Main index: {len(existing_ids):,} stories")
@@ -746,23 +746,14 @@ def merge_into_main(dry_run: bool = False):
     main_data["last_updated"]  = datetime.now(timezone.utc).isoformat()
 
     total_expected = len(main_data["stories"])
-    tmp = MAIN_INDEX.with_suffix(".tmp")
-    print(f"Writing {total_expected:,} stories to {tmp}...")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(main_data, f, indent=2, ensure_ascii=False)
-
-    # Validate before replacing original
+    print(f"Writing {total_expected:,} stories to {MAIN_INDEX}...")
+    # Validated save: re-reads the written file and checks the story count
+    # before replacing; on failure the original index is untouched.
     try:
-        with open(tmp, encoding="utf-8") as f:
-            check = json.load(f)
-        got = len(check.get("stories", []))
-        assert got == total_expected, f"Expected {total_expected} stories, got {got}"
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
-        print(f"ERROR: Validation failed — original index untouched: {e}")
+        index_store.save_index(main_data, MAIN_INDEX, validate=True)
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
         return
-
-    tmp.replace(MAIN_INDEX)
     print(f"✓ Merged {len(to_add):,} wayback stories into {MAIN_INDEX}")
     print(f"  Total stories now: {total_expected:,}")
 

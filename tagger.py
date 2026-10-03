@@ -36,6 +36,7 @@ import logging
 from pathlib import Path
 from tag_trust import export_tags
 from typing import Any, Optional
+import index_store
 
 log = logging.getLogger(__name__)
 
@@ -1248,8 +1249,8 @@ def process_index(index_path: Path,
                         format="%(asctime)s  %(levelname)-8s %(message)s",
                         datefmt="%H:%M:%S")
 
-    with open(index_path, encoding="utf-8") as f:
-        data = json.load(f)
+    in_place = output_path is None or Path(output_path) == Path(index_path)
+    data = index_store.load_index(index_path, for_write=in_place)
 
     stories = data["stories"]
     total   = len(stories)
@@ -1302,23 +1303,13 @@ def process_index(index_path: Path,
     data["semantic_tagging"] = use_semantic
 
     out = output_path or index_path
-    tmp = Path(str(out) + ".tmp")
-
-    print(f"Writing {len(stories):,} stories to {tmp}...")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    # Validate before replacing original
+    print(f"Writing {len(stories):,} stories to {out}...")
+    # Validated, atomic save: the original is untouched unless the new file
+    # holds every story
     try:
-        with open(tmp, encoding="utf-8") as f:
-            check = json.load(f)
-        got = len(check.get("stories", []))
-        assert got == len(stories), f"Expected {len(stories)} stories, got {got}"
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
+        index_store.save_index(data, out, validate=True)
+    except RuntimeError as e:
         raise RuntimeError(f"Tagger output validation failed — original untouched: {e}")
-
-    tmp.replace(out)
     mode = "regex + semantic" if use_semantic else "regex only"
     print(f"Done. Tagged {tagged}/{total} stories ({mode}) -> {out}")
 

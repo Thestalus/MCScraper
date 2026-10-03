@@ -3,6 +3,7 @@
 import json, sys, time, tempfile, os
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
+import index_store
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -34,8 +35,7 @@ def parallel_regex_tag(stories: list, chunksize: int = 200) -> dict:
 
 def main():
     print("Loading index...")
-    with open(INDEX_PATH) as f:
-        data = json.load(f)
+    data = index_store.load_index(INDEX_PATH, for_write=True)
 
     stories = data["stories"]
     valid = [s for s in stories if s and s.get("full_text")]
@@ -100,13 +100,7 @@ def main():
             updated += 1
 
     print(f"Saving index ({updated} stories updated)...")
-    out = Path(INDEX_PATH)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=out.parent, delete=False, suffix=".tmp"
-    ) as tmp:
-        json.dump(data, tmp, ensure_ascii=False)
-        tmp_path = tmp.name
-    os.replace(tmp_path, out)
+    index_store.save_index(data, INDEX_PATH, indent=None)
     print("Done.")
 
 

@@ -29,6 +29,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from tagger import tag_story
+import index_store
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -437,10 +438,10 @@ def run(args):
     stories: list[Story] = []
     already_done: set[str] = set()
 
+    index_store.acquire_write_lock(index_path)   # this run rewrites the index
     if index_path.exists() and not args.no_resume:
         try:
-            with open(index_path, encoding="utf-8") as f:
-                saved = json.load(f)
+            saved = index_store.load_index(index_path, for_write=True)
             for s in saved.get("stories", []):
                 already_done.add(s["story_url"])
                 stories.append(Story(**{k: v for k, v in s.items()
@@ -468,11 +469,8 @@ def run(args):
             "total_stories": len(stories),
             "stories":       [asdict(s) for s in stories],
         }
-        # Write to a temp file first, then rename — prevents corrupt index on crash
-        tmp = index_path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(index, f, indent=2, ensure_ascii=False)
-        tmp.replace(index_path)
+        # Atomic, locked, and refuses to clobber changes made by another job
+        index_store.save_index(index, index_path)
 
     for i, landing_url in enumerate(to_scrape, 1):
         log.info(f"[{i}/{len(to_scrape)}] {landing_url}")

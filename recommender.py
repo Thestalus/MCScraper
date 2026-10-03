@@ -16,8 +16,11 @@ Preferences are stored in output/preferences.json and persist across sessions.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
+import os
+import tempfile
 import math
 import threading
 import time
@@ -247,6 +250,20 @@ class EmbeddingEngine:
 
 # ── Preference store ──────────────────────────────────────────────────────────
 
+def _locked(method):
+    """Run a PreferenceStore method under the store's lock.
+
+    Flask serves requests on several threads; without this, a save that is
+    serialising self.data while another request appends to it can fail with
+    "dictionary changed size during iteration", or two saves can interleave.
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class PreferenceStore:
     """
     Persists user likes/dislikes and derives a taste profile vector.
@@ -262,6 +279,7 @@ class PreferenceStore:
     """
 
     def __init__(self, prefs_path: Path):
+        self._lock = threading.RLock()
         self.path = prefs_path
         self.data = {
             "liked_stories":    [],
@@ -299,22 +317,39 @@ class PreferenceStore:
         taste = {k: sorted(self.data.get(k) or []) for k in self.TASTE_KEYS}
         return hashlib.sha1(json.dumps(taste, sort_keys=True).encode()).hexdigest()
 
+    @_locked
     def _save(self):
-        self.path.write_text(
-            json.dumps(self.data, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
+        # Atomic: write a unique temp file, then swap it in, so a crash or a
+        # concurrent read never sees half-written JSON.
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=self.path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2, ensure_ascii=False)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, self.path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
+    @_locked
+    def set_value(self, key: str, value) -> None:
+        """Set a top-level preference and save (for routes; keeps the lock)."""
+        self.data[key] = value
+        self._save()
+
+    @_locked
     def hide_rec(self, story_id: str):
         if story_id not in self.data["hidden_recs"]:
             self.data["hidden_recs"].append(story_id)
         self._save()
 
+    @_locked
     def unhide_rec(self, story_id: str):
         if story_id in self.data["hidden_recs"]:
             self.data["hidden_recs"].remove(story_id)
         self._save()
 
+    @_locked
     def like_story(self, story_id: str, note: str = ""):
         if story_id not in self.data["liked_stories"]:
             self.data["liked_stories"].append(story_id)
@@ -324,6 +359,7 @@ class PreferenceStore:
             self.data["notes"][story_id] = note
         self._save()
 
+    @_locked
     def dislike_story(self, story_id: str):
         if story_id not in self.data["disliked_stories"]:
             self.data["disliked_stories"].append(story_id)
@@ -331,12 +367,14 @@ class PreferenceStore:
             self.data["liked_stories"].remove(story_id)
         self._save()
 
+    @_locked
     def unlike_story(self, story_id: str):
         for lst in ("liked_stories", "disliked_stories"):
             if story_id in self.data[lst]:
                 self.data[lst].remove(story_id)
         self._save()
 
+    @_locked
     def like_author(self, author: str):
         if author not in self.data["liked_authors"]:
             self.data["liked_authors"].append(author)
@@ -344,6 +382,7 @@ class PreferenceStore:
             self.data["disliked_authors"].remove(author)
         self._save()
 
+    @_locked
     def dislike_author(self, author: str):
         if author not in self.data["disliked_authors"]:
             self.data["disliked_authors"].append(author)
@@ -351,12 +390,14 @@ class PreferenceStore:
             self.data["liked_authors"].remove(author)
         self._save()
 
+    @_locked
     def unlike_author(self, author: str):
         for lst in ("liked_authors", "disliked_authors"):
             if author in self.data[lst]:
                 self.data[lst].remove(author)
         self._save()
 
+    @_locked
     def record_visit(self, story_id: str, chapter: int, total: int):
         import time
         self.data["history"][story_id] = {
@@ -384,12 +425,14 @@ class PreferenceStore:
         if author in self.data["disliked_authors"]: return "disliked"
         return "none"
 
+    @_locked
     def want_story(self, story_id: str):
         lst = self.data.setdefault("want_to_read", [])
         if story_id not in lst:
             lst.append(story_id)
             self._save()
 
+    @_locked
     def unwant_story(self, story_id: str):
         lst = self.data.get("want_to_read", [])
         if story_id in lst:

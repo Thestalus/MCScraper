@@ -35,6 +35,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scraper import fetch_chapter_text, get, DELAY
+import index_store
 from bs4 import BeautifulSoup
 
 logging.basicConfig(
@@ -117,8 +118,7 @@ def main():
         return
 
     log.info(f"Loading {index_path} …")
-    with open(index_path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = index_store.load_index(index_path, for_write=not args.dry_run)
 
     stories = data.get("stories", [])
 
@@ -164,10 +164,7 @@ def main():
     chapter_skipped = []   # stories where a chapter was missing — text preserved
 
     def save_index():
-        tmp = index_path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        tmp.replace(index_path)
+        index_store.save_index(data, index_path)
 
     def process_one(s: dict) -> tuple[str, str, str | None]:
         """Returns (story_id, new_text, word_count, error)."""

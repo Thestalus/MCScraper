@@ -58,6 +58,7 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 from collections import defaultdict
+import index_store
 
 # ── Optional imports ───────────────────────────────────────────────────────────
 
@@ -771,20 +772,12 @@ def resolve_paths(sources: list[str]) -> list[Path]:
 
 # ── Index operations ──────────────────────────────────────────────────────────
 
-def _load_index(path: Path) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+def _load_index(path: Path, for_write: bool = True) -> dict:
+    return index_store.load_index(path, for_write=for_write)
 
 
 def _save_index(data: dict, path: Path) -> None:
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    with open(tmp, encoding="utf-8") as f:
-        check = json.load(f)
-    assert len(check.get("stories", [])) == len(data.get("stories", [])), \
-        "Story count mismatch after save"
-    tmp.replace(path)
+    index_store.save_index(data, path, validate=True)
 
 
 def patch_index(entry: dict, index_path: Path) -> str:
@@ -881,7 +874,7 @@ def ingest_folder(folder: Path, default_author: str,
     Skips stories already in the index (matched by ID or title+author).
     Returns counts: added, skipped_existing, skipped_empty, failed.
     """
-    data    = _load_index(index_path)
+    data    = _load_index(index_path, for_write=not dry_run)
     stories = data.get("stories", [])
     existing_ids    = {s["id"] for s in stories}
     existing_ta     = {(s.get("title", "").lower(), s.get("author", "").lower())

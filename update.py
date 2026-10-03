@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin
 
 import requests
+import index_store
 from bs4 import BeautifulSoup
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -274,8 +275,7 @@ def apply_chapter_updates(chapter_updates: list[dict]) -> int:
         return 0
 
     log.info(f"Loading index to apply {len(chapter_updates)} chapter updates...")
-    with open(INDEX_PATH, encoding="utf-8") as f:
-        data = json.load(f)
+    data = index_store.load_index(INDEX_PATH, for_write=True)
 
     updates_by_id = {u["id"]: u for u in chapter_updates}
     applied = 0
@@ -291,21 +291,23 @@ def apply_chapter_updates(chapter_updates: list[dict]) -> int:
         s["chapter_urls"]  = (s.get("chapter_urls") or []) + upd["new_chapter_urls"]
         if upd.get("updated_date"):
             s["updated_date"] = upd["updated_date"]
-        # Re-tag with regex since there's new text
+        # Re-tag with regex since there's new text. tag_story() returns a fresh
+        # regex-only dict; SetFit/Svengali tags come back on the next
+        # `make post-update`, but arc results (hours of LLM time) would not —
+        # so carry them over.
         if s.get("full_text") and not s.get("fetch_error"):
             from tagger import tag_story
+            old_at = s.get("auto_tags") or {}
             s["auto_tags"] = tag_story(s)
+            for key in ("narrative_arc", "subject_gender", "_arc_error"):
+                if key in old_at:
+                    s["auto_tags"][key] = old_at[key]
         applied += 1
 
     if applied == 0:
         return 0
 
-    tmp = INDEX_PATH.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    with open(tmp, encoding="utf-8") as f:
-        json.load(f)  # validate
-    tmp.replace(INDEX_PATH)
+    index_store.save_index(data, INDEX_PATH, validate=True)
     log.info(f"Applied chapter updates to {applied} existing stories")
     return applied
 
@@ -341,8 +343,7 @@ def merge_new_stories(new_stories: list[dict]) -> int:
         }
     else:
         log.info(f"Loading {INDEX_PATH} ({INDEX_PATH.stat().st_size // 1024 // 1024}MB)...")
-        with open(INDEX_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        data = index_store.load_index(INDEX_PATH, for_write=True)
 
         existing_ids = {s["id"] for s in data.get("stories", [])}
         to_add = [s for s in tagged_stories if s.get("id") not in existing_ids]
@@ -352,23 +353,12 @@ def merge_new_stories(new_stories: list[dict]) -> int:
         data["total_stories"] = len(data["stories"])
         data["last_updated"] = datetime.now(timezone.utc).isoformat()
 
-    # Write to .tmp first — never touch original until confirmed safe
-    tmp = INDEX_PATH.with_suffix(".tmp")
-    log.info(f"Writing to {tmp}...")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    # Validate the tmp file before replacing original
+    # Validated, atomic save — never touches the original until the new file
+    # is confirmed to hold every story
     try:
-        with open(tmp, encoding="utf-8") as f:
-            check = json.load(f)
-        assert len(check.get("stories", [])) >= len(data.get("stories", [])), \
-            "Story count mismatch after write"
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
+        index_store.save_index(data, INDEX_PATH, validate=True)
+    except RuntimeError as e:
         raise RuntimeError(f"Merge validation failed — original index untouched: {e}")
-
-    tmp.replace(INDEX_PATH)
     log.info(f"Merged {len(to_add)} genuinely new stories into {INDEX_PATH}")
 
     # Append only newly-added stories to JSONL training files

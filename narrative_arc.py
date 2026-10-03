@@ -49,6 +49,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
+import index_store
+
 log = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -317,16 +319,12 @@ def parse_arc_response(response: str) -> Optional[dict]:
 
 # ── Main detection pipeline ───────────────────────────────────────────────────
 
-def load_index() -> dict:
-    with open(INDEX_PATH, encoding="utf-8") as f:
-        return json.load(f)
+def load_index(for_write: bool = False) -> dict:
+    return index_store.load_index(INDEX_PATH, for_write=for_write)
 
 
 def save_index(data: dict):
-    tmp = Path(OUTPUT_PATH).with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    tmp.replace(Path(OUTPUT_PATH))
+    index_store.save_index(data, OUTPUT_PATH)
 
 
 def run(args):
@@ -354,7 +352,7 @@ def run(args):
 
     # Load index
     log.info(f"Loading {INDEX_PATH}...")
-    data     = load_index()
+    data     = load_index(for_write=True)
     stories  = data.get("stories", [])
     log.info(f"Total stories: {len(stories):,}")
 

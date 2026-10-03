@@ -1217,3 +1217,96 @@ class TestSetFitEmbeddingCache:
         st.build_embeddings(stories)
         assert self._embedded(st, calls) == 0
         assert "encoder_fp" in np.load(st.EMBED_CACHE, allow_pickle=True).files
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WRITE SAFETY — index_store and preferences
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestIndexStore:
+
+    @pytest.fixture
+    def idx(self, tmp_path):
+        import index_store
+        p = tmp_path / "stories_index.json"
+        p.write_text(json.dumps(make_index([SAMPLE_STORY_HYPNOSIS])))
+        p.chmod(0o644)
+        yield p
+        index_store.release_write_lock(p)
+
+    def test_save_roundtrip_keeps_permissions_and_leaves_no_temp(self, idx):
+        import index_store
+        data = index_store.load_index(idx, for_write=True)
+        data["stories"].append({**SAMPLE_STORY_OFFICE})
+        index_store.save_index(data, idx, validate=True)
+        index_store.save_index(data, idx)          # a second checkpoint is fine
+        assert len(json.loads(idx.read_text())["stories"]) == 2
+        assert (idx.stat().st_mode & 0o777) == 0o644
+        assert [p.name for p in idx.parent.iterdir() if p.suffix == ".tmp"] == []
+
+    def test_change_on_disk_after_load_is_refused(self, idx):
+        import index_store, os, time
+        data = index_store.load_index(idx, for_write=True)
+        idx.write_text(json.dumps(make_index([])))   # "another machine" wrote it
+        later = time.time() + 5
+        os.utime(idx, (later, later))
+        with pytest.raises(index_store.IndexChangedError):
+            index_store.save_index(data, idx)
+        assert json.loads(idx.read_text())["stories"] == []   # their write survives
+
+    def test_second_writer_is_refused_while_lock_held(self, idx):
+        import index_store, subprocess, sys, textwrap
+        holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+            import sys, time; sys.path.insert(0, {str(Path(__file__).parent)!r})
+            import index_store
+            index_store.load_index({str(idx)!r}, for_write=True)
+            print("locked", flush=True); time.sleep(30)
+        """)], stdout=subprocess.PIPE, text=True)
+        try:
+            assert holder.stdout.readline().strip() == "locked"
+            with pytest.raises(index_store.IndexLockedError, match="pid=" + str(holder.pid)):
+                index_store.load_index(idx, for_write=True)
+        finally:
+            holder.kill(); holder.wait()
+
+    def test_lock_left_by_crashed_process_is_cleared(self, idx):
+        import index_store, socket, subprocess, sys
+        dead = subprocess.Popen([sys.executable, "-c", "pass"]); dead.wait()
+        Path(str(idx) + ".lock").write_text(json.dumps(
+            {"host": socket.gethostname(), "pid": dead.pid, "command": "x", "started_at": "t"}))
+        index_store.load_index(idx, for_write=True)   # does not raise
+        assert json.loads(Path(str(idx) + ".lock").read_text())["pid"] != dead.pid
+
+
+class TestPreferenceConcurrency:
+
+    def test_parallel_mutations_all_survive_as_valid_json(self, tmp_path):
+        import threading
+        from recommender import PreferenceStore
+        path = tmp_path / "preferences.json"
+        prefs = PreferenceStore(path)
+        errors = []
+
+        def like_many(t):
+            try:
+                for i in range(40):
+                    prefs.like_story(f"T{t}-S{i}")
+                    prefs.record_visit(f"T{t}-S{i}", 1, 1)
+            except Exception as e:     # e.g. "dictionary changed size during iteration"
+                errors.append(e)
+
+        def save_loop():
+            try:
+                for _ in range(80):
+                    prefs._save()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=like_many, args=(t,)) for t in range(8)]
+        threads.append(threading.Thread(target=save_loop))
+        for t in threads: t.start()
+        for t in threads: t.join()
+        assert errors == []
+        saved = json.loads(path.read_text())
+        assert len(saved["liked_stories"]) == 8 * 40
+        assert len(saved["history"]) == 8 * 40

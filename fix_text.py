@@ -13,6 +13,7 @@ import re
 import sqlite3
 import argparse
 from pathlib import Path
+import index_store
 
 try:
     import wordninja
@@ -341,8 +342,7 @@ def main():
         return
 
     print(f"Loading {index_path} …")
-    with open(index_path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = index_store.load_index(index_path, for_write=not args.dry_run)
 
     stories = data.get("stories", [])
     changed = 0
@@ -374,11 +374,8 @@ def main():
         print("Nothing to fix.")
         return
 
-    tmp = index_path.with_suffix(".tmp")
     print(f"Saving {index_path} …")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    tmp.replace(index_path)
+    index_store.save_index(data, index_path)
     print("Saved.")
 
     # Rebuild SQLite cache

@@ -31,6 +31,7 @@ import argparse
 import unicodedata
 from pathlib import Path
 from typing import Optional
+import index_store
 
 INDEX_PATH = Path("./output/stories_index.json")
 
@@ -226,8 +227,7 @@ def process_index(index_path: Path, dry_run: bool = False,
                   story_id: Optional[str] = None) -> None:
 
     print(f"Loading {index_path}...")
-    with open(index_path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = index_store.load_index(index_path, for_write=not dry_run)
 
     stories = data.get("stories", [])
     print(f"Total stories: {len(stories):,}")
@@ -302,23 +302,9 @@ def process_index(index_path: Path, dry_run: bool = False,
         print("Nothing to clean.")
         return
 
-    # Save
-    tmp = index_path.with_suffix(".tmp")
-    print(f"\nSaving to {tmp}...")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    # Validate
-    try:
-        with open(tmp, encoding="utf-8") as f:
-            check = json.load(f)
-        assert len(check.get("stories", [])) == len(stories)
-        print(f"Validation OK — {len(stories):,} stories in output")
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
-        raise RuntimeError(f"Validation failed — original untouched: {e}")
-
-    tmp.replace(index_path)
+    # Save (validated: re-reads the written file and checks the story count)
+    print(f"\nSaving to {index_path}...")
+    index_store.save_index(data, index_path, validate=True)
     print(f"Saved to {index_path}")
     print(f"\nRun 'make rebuild-jsonl' to update training files.")
 

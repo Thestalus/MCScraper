@@ -37,6 +37,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_predict, train_test_split
 from sklearn.metrics import f1_score, precision_score, recall_score
+import index_store
 
 log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -739,17 +740,15 @@ def tag_all(stories: list[dict], vecs: np.ndarray,
 
     log.info(f"Tagged {tagged:,} stories")
 
-    tmp = Path(INDEX_PATH).with_suffix(".tmp")
-    with open(INDEX_PATH, encoding="utf-8") as f:
-        data = json.load(f)
+    # Re-read the current index and merge only auto_tags into it, so fields other
+    # jobs changed meanwhile survive; the lock and change check cover the write.
+    data = index_store.load_index(INDEX_PATH, for_write=True)
     story_map = {s["id"]: s for s in stories}
     target = data.get("stories", data) if isinstance(data, dict) else data
     for s in target:
         if s["id"] in story_map:
             s["auto_tags"] = story_map[s["id"]].get("auto_tags", {})
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-    tmp.replace(INDEX_PATH)
+    index_store.save_index(data, INDEX_PATH, indent=None)
     log.info(f"Index updated: {INDEX_PATH}")
 
 
@@ -830,8 +829,7 @@ def main():
 
     if args.retag:
         log.info("Clearing existing SetFit tags from index...")
-        with open(INDEX_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        data = index_store.load_index(INDEX_PATH, for_write=True)
         all_dims = set(info["dim"] for info in classifiers.values())
         for s in data.get("stories", []):
             if not s: continue
@@ -847,10 +845,7 @@ def main():
                         else:
                             sources.pop(tag, None)
                             at.get(dim, []).remove(tag)
-        tmp = Path(INDEX_PATH).with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        tmp.replace(INDEX_PATH)
+        index_store.save_index(data, INDEX_PATH, indent=None)
         log.info("SetFit tags cleared. Re-loading and applying...")
         stories = load_index()
         vecs, valid = build_embeddings(stories, rebuild=args.rebuild_embeddings)

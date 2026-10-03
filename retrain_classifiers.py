@@ -54,6 +54,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import setfit_trainer as st
+import index_store
 
 log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -180,9 +181,7 @@ def main():
     if args.tag:
         log.info("Applying tags to full index...")
         # Clear old SetFit tags first then re-apply (retag semantics)
-        import json
-        with open(st.INDEX_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        data = index_store.load_index(st.INDEX_PATH, for_write=True)
         all_dims = set(info["dim"] for info in classifiers.values())
         for s in data.get("stories", []):
             if not s:
@@ -199,11 +198,7 @@ def main():
                         else:
                             sources.pop(tag, None)
                             at.get(dim, []).remove(tag)
-        import tempfile, os
-        tmp_path = Path(st.INDEX_PATH).with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        tmp_path.replace(st.INDEX_PATH)
+        index_store.save_index(data, st.INDEX_PATH, indent=None)
         log.info("Cleared old SetFit tags. Re-loading and applying...")
         stories = st.load_index()
         vecs, valid = st.build_embeddings(stories)
