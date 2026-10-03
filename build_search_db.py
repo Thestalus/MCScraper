@@ -200,9 +200,12 @@ def build(index_path: str, db_path: str, text_cache_path: str,
 
     full_texts = _load_full_text_cache(text_cache_path)
 
-    # Remove old DB so schema changes apply cleanly
-    if db_p.exists():
-        db_p.unlink()
+    # Build into a fresh temp DB (so schema changes apply cleanly) and swap it in
+    # at the end; if the build fails, the old search.db stays usable.
+    final_db_path = db_path
+    db_path = f"{final_db_path}.tmp-{os.getpid()}"
+    if os.path.exists(db_path):
+        os.unlink(db_path)
 
     conn = _open_db(db_path)
 
@@ -316,6 +319,8 @@ def build(index_path: str, db_path: str, text_cache_path: str,
     conn.close()
     print("done")
 
+    os.replace(db_path, final_db_path)
+    db_path = final_db_path
     size_mb = db_p.stat().st_size / 1_048_576
     print(f"\n  search.db built → {db_path}  ({size_mb:.0f} MB)")
     print(f"  {count:,} stories  ·  {len(tags_rows):,} tag rows  ·  {text_count:,} full-text docs")

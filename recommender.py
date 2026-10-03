@@ -26,16 +26,16 @@ from pathlib import Path
 from collections import defaultdict
 from typing import Optional
 
+from tag_utils import get_auto_tags
+
 log = logging.getLogger(__name__)
 
 
-def _at(s: dict) -> dict:
-    """Return parsed auto_tags dict, parsing lazily from raw JSON string on first access."""
-    at = s.get("auto_tags")
-    if isinstance(at, str):
-        at = json.loads(at) if at else {}
-        s["auto_tags"] = at
-    return at or {}
+_at = get_auto_tags  # short alias used throughout this module
+
+
+def _sig_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
 # ── Embedding engine ──────────────────────────────────────────────────────────
@@ -76,6 +76,7 @@ class EmbeddingEngine:
     def story_signature(self, s: dict) -> str:
         """Build a text signature for a story used for embedding."""
         at = _at(s)
+        arc = at.get("narrative_arc") or {}
         parts = [
             s.get("title", ""),
             s.get("description", ""),
@@ -86,13 +87,15 @@ class EmbeddingEngine:
             " ".join(at.get("tone", [])),
             " ".join(at.get("dominance", [])),
             " ".join(at.get("pacing", [])),
-            # Arc tags — populated after `make arc`, empty until then
-            at.get("story_status", ""),
-            at.get("ending_state", ""),
-            at.get("subject_change", ""),
-            at.get("emotional_tone_end", ""),
-            at.get("dominant_type", ""),
+            # Arc tags — written by narrative_arc.py under auto_tags["narrative_arc"];
+            # empty until arc tagging has run
+            arc.get("story_status", ""),
+            arc.get("ending_state", ""),
+            arc.get("subject_change", ""),
+            arc.get("emotional_tone_end", ""),
+            arc.get("dominant_type", ""),
         ]
+        parts = [p if isinstance(p, str) else " ".join(p) for p in parts]
         return " ".join(p for p in parts if p).lower()
 
     def build_index(self, stories: list[dict],
@@ -118,23 +121,34 @@ class EmbeddingEngine:
         if self.semantic:
             import numpy as np
             # ── Load existing embedding cache ──────────────────────────────
+            # Each vector is stored with a hash of the signature text it was
+            # encoded from, so a story whose title/description/tags changed is
+            # re-encoded instead of keeping a stale vector. Caches written before
+            # hashes were stored have none, and are re-encoded once.
             cached: dict[str, object] = {}
+            cached_hash: dict[str, str] = {}
             if cache_path and Path(cache_path).exists():
                 try:
                     data = np.load(cache_path, allow_pickle=False)
-                    for sid, vec in zip(data["ids"].tolist(), data["vecs"]):
+                    hashes = data["sig_hashes"].tolist() if "sig_hashes" in data.files else [""] * len(data["ids"])
+                    for sid, vec, h in zip(data["ids"].tolist(), data["vecs"], hashes):
                         cached[str(sid)] = vec
+                        cached_hash[str(sid)] = h
                     log.info(f"  Loaded {len(cached)} cached embeddings from {cache_path}")
                 except Exception as e:
                     log.warning(f"  Could not load embedding cache: {e}")
 
-            # ── Encode only stories missing from cache ─────────────────────
-            to_encode = [s for s in valid if s["id"] not in cached]
+            sig_text = {s["id"]: self.story_signature(s) for s in valid}
+            sig_hash = {sid: _sig_hash(t) for sid, t in sig_text.items()}
+
+            # ── Encode stories that are new or whose signature changed ─────
+            to_encode = [s for s in valid
+                         if s["id"] not in cached or cached_hash.get(s["id"]) != sig_hash[s["id"]]]
             if to_encode:
-                log.info(f"  Encoding {len(to_encode)} stories "
-                         f"({len(valid) - len(to_encode)} already cached)...")
-                sigs = [self.story_signature(s) for s in to_encode]
-                vecs = self._model.encode(sigs, normalize_embeddings=True,
+                log.info(f"  Encoding {len(to_encode)} new/changed stories "
+                         f"({len(valid) - len(to_encode)} reused from cache)...")
+                vecs = self._model.encode([sig_text[s["id"]] for s in to_encode],
+                                          normalize_embeddings=True,
                                           batch_size=64, show_progress_bar=True)
                 for s, v in zip(to_encode, vecs):
                     cached[s["id"]] = v
@@ -146,14 +160,15 @@ class EmbeddingEngine:
                 if v is not None:
                     self._embeddings[s["id"]] = v if isinstance(v, np.ndarray) else np.array(v, dtype=np.float32)
 
-            # ── Save updated cache ─────────────────────────────────────────
-            if cache_path and to_encode:
+            # ── Save updated cache (also drops stories no longer in the index) ─
+            if cache_path and (to_encode or len(cached) != len(self._embeddings)):
                 try:
                     ids_arr  = np.array(list(self._embeddings.keys()))
                     vecs_arr = np.array([self._embeddings[sid] for sid in ids_arr],
                                         dtype=np.float32)
+                    hash_arr = np.array([sig_hash[sid] for sid in ids_arr])
                     tmp = Path(cache_path).with_suffix(".tmp.npz")
-                    np.savez(tmp, ids=ids_arr, vecs=vecs_arr)
+                    np.savez(tmp, ids=ids_arr, vecs=vecs_arr, sig_hashes=hash_arr)
                     tmp.replace(cache_path)
                     log.info(f"  Saved embedding cache ({len(ids_arr)} stories) → {cache_path}")
                 except Exception as e:

@@ -240,6 +240,11 @@ mark.hl { background:#5a4a20; color:#f0d890; border-radius:2px; padding:0 2px; }
   </nav>
 </header>
 <div class="container">
+{% if app_state.data.get("_meta_stale") %}
+<div style="background:#fff4e5; border:1px solid #e0a040; border-radius:6px; padding:0.5rem 1rem; margin:0.75rem 0; font-size:0.85rem;">
+  Story metadata is out of date (stories_meta.db is older than stories_index.json). Tags, titles and counts may be stale &mdash; run <code>make build-stories-db</code> and restart.
+</div>
+{% endif %}
 {% block content %}{% endblock %}
 </div>
 <script>

@@ -36,6 +36,7 @@ def _register_jinja_filters(app, state):
     app.jinja_env.filters["dt"]            = dt
     app.jinja_env.globals["visible_tags"]  = visible_tags
     app.jinja_env.globals["story_tags"]    = get_auto_tags
+    app.jinja_env.globals["app_state"]     = state
 
 
 def create_app(state: AppState):

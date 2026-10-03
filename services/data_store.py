@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 from recommender import EmbeddingEngine, PreferenceStore, RecommendationEngine
+from tag_utils import get_auto_tags  # noqa: F401 — re-exported for routes/services
 
 PREFS_PATH = "./output/preferences.json"
 CACHE_PATH = "./output/recs_cache.json"
@@ -33,16 +34,6 @@ def _load_from_sqlite(db_path: str) -> tuple:
         s["_has_text"]  = bool(s.pop("has_text", 0))
         stories_slim.append(s)
     return stories_slim, top_meta
-
-
-def get_auto_tags(s: dict) -> dict:
-    """Return parsed auto_tags dict for a story, parsing lazily on first access."""
-    at = s.get("auto_tags")
-    if isinstance(at, str):
-        parsed = json.loads(at) if at else {}
-        s["auto_tags"] = parsed
-        return parsed
-    return at or {}
 
 
 def load_recs_cache(state) -> bool:
@@ -112,8 +103,11 @@ def load_data(state) -> None:
     """Load story data into state, init preference/recommendation engines, start background tasks."""
     from services.text_store import build_text_cache
 
-    p         = Path(state.index_path)
-    db_path   = str(Path(state.index_path).parent / "stories_meta.db")
+    # Resolve paths now: background threads below run later, and must write to
+    # this app's data folder even if the working directory changes meanwhile.
+    p         = Path(state.index_path).absolute()
+    state.index_path = str(p)
+    db_path   = str(p.parent / "stories_meta.db")
     use_sqlite = Path(db_path).exists()
 
     if not use_sqlite and not p.exists():
@@ -127,6 +121,13 @@ def load_data(state) -> None:
         print(f"Loaded {len(stories_slim):,} stories from SQLite in {time.time()-t0:.1f}s")
         state.data = top_meta
         state.data["_index_path"] = str(p)
+        # A metadata DB older than the index shows outdated tags/titles/counts.
+        # Loading the 1 GB+ JSON instead would make every launch slow, so keep
+        # using it but say so loudly (console + banner); `make browse` rebuilds it.
+        state.data["_meta_stale"] = p.exists() and Path(db_path).stat().st_mtime < p.stat().st_mtime
+        if state.data["_meta_stale"]:
+            print("WARNING: stories_meta.db is older than stories_index.json — the browser is "
+                  "showing outdated metadata. Run: make build-stories-db")
     else:
         print("stories_meta.db not found — loading from JSON (run make build-stories-db to speed this up)")
         with open(p, encoding="utf-8") as f:
@@ -150,7 +151,7 @@ def load_data(state) -> None:
     gc.collect()
 
     # Init preference store and recommendation engine
-    state.prefs = PreferenceStore(Path(PREFS_PATH))
+    state.prefs = PreferenceStore(Path(PREFS_PATH).absolute())
     state.rec   = RecommendationEngine(state.engine, state.prefs, stories_slim)
 
     # Build full-text SQLite cache in background (instant on subsequent runs)
@@ -162,7 +163,7 @@ def load_data(state) -> None:
     # Try loading pre-calculated cache; only build embeddings if cache is missing/stale
     cache_loaded = load_recs_cache(state)
     if not cache_loaded:
-        _emb_cache = Path(OUTPUT_DIR) / "recs_embeddings.npz"
+        _emb_cache = (Path(OUTPUT_DIR) / "recs_embeddings.npz").absolute()
         threading.Thread(
             target=lambda: state.engine.build_index(stories_slim, cache_path=_emb_cache),
             daemon=True

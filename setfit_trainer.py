@@ -21,6 +21,7 @@ Outputs:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -379,39 +380,79 @@ def finetune_encoder(stories: list[dict], active_tags: list[tuple[str, str]],
 
 # ── Phase 2: Build embeddings with fine-tuned model ───────────────────────────
 
-def build_embeddings(stories: list[dict]) -> np.ndarray:
+def encoder_fingerprint(model_path: str) -> str:
+    """Identify the encoder (and chunking settings) that produced cached vectors.
+
+    For a local fine-tuned model this hashes each file's name, size and mtime,
+    so re-running finetune_encoder() changes the fingerprint and forces a full
+    re-embed. For a hub model name it hashes the name.
+    """
+    h = hashlib.sha1(f"chunks={N_CHUNKS}x{CHUNK_WORDS}|".encode())
+    p = Path(model_path)
+    if p.is_dir():
+        for f in sorted(p.rglob("*")):
+            if f.is_file():
+                st = f.stat()
+                h.update(f"{f.relative_to(p)}:{st.st_size}:{int(st.st_mtime)}|".encode())
+    else:
+        h.update(model_path.encode())
+    return h.hexdigest()
+
+
+def _content_hash(chunks: list[str]) -> str:
+    return hashlib.sha1("\x00".join(chunks).encode("utf-8")).hexdigest()
+
+
+def build_embeddings(stories: list[dict], rebuild: bool = False) -> np.ndarray:
     """
     Embed all stories using multi-chunk max-pooling with the fine-tuned model.
-    Returns array of shape (n_stories, dim). Caches to EMBED_CACHE.
+    Returns (array of shape (n_stories, dim), valid stories). Caches to EMBED_CACHE.
+
+    The cache is reused only when it was built by the same encoder (see
+    encoder_fingerprint) and a story's text chunks are unchanged; otherwise the
+    affected vectors are recomputed. rebuild=True ignores the cache entirely.
     """
     from sentence_transformers import SentenceTransformer
 
     model_path = SETFIT_MODEL_DIR if Path(SETFIT_MODEL_DIR).exists() else BASE_MODEL
+    fingerprint = encoder_fingerprint(model_path)
     log.info(f"Loading encoder from {model_path}...")
     model = SentenceTransformer(model_path)
 
     valid   = [s for s in stories if has_text(s)]
-    ids     = [s["id"] for s in valid]
-    id_set  = set(ids)
+    chunks  = {s["id"]: story_chunks(s) for s in valid}
+    hashes  = {sid: _content_hash(c) for sid, c in chunks.items()}
 
-    # Load existing cache
-    cached_ids  = []
-    cached_vecs = None
-    if Path(EMBED_CACHE).exists():
+    # Load existing cache: id -> (vector, content hash)
+    cached: dict[str, tuple[np.ndarray, str]] = {}
+    if Path(EMBED_CACHE).exists() and not rebuild:
         log.info(f"Loading embedding cache from {EMBED_CACHE}...")
         npz = np.load(EMBED_CACHE, allow_pickle=True)
-        cached_ids  = list(npz["ids"])
-        cached_vecs = npz["vecs"]
-        log.info(f"  Loaded {len(cached_ids):,} cached embeddings")
+        cache_fp = str(npz["encoder_fp"]) if "encoder_fp" in npz.files else None
+        if cache_fp is not None and cache_fp != fingerprint:
+            log.warning("  Encoder changed since the cache was built — re-embedding every story")
+        else:
+            if cache_fp is None:
+                # Caches from before fingerprints were stored. Re-embedding all
+                # stories takes hours, so adopt it and stamp the fingerprint; run
+                # with --rebuild-embeddings if it may predate the current encoder.
+                log.warning("  Cache has no encoder fingerprint; assuming it matches the "
+                            "current encoder (use --rebuild-embeddings to be sure)")
+            old_hashes = (npz["content_hashes"].tolist() if "content_hashes" in npz.files
+                          else [None] * len(npz["ids"]))
+            for sid, vec, ch in zip(npz["ids"].tolist(), npz["vecs"], old_hashes):
+                # A missing content hash (old cache) is trusted, like the fingerprint
+                cached[str(sid)] = (vec, ch if ch is not None else hashes.get(str(sid), ""))
+        log.info(f"  Reusable cached embeddings: {len(cached):,}")
 
-    cached_set = set(cached_ids)
-    to_embed   = [s for s in valid if s["id"] not in cached_set]
+    to_embed = [s for s in valid
+                if s["id"] not in cached or cached[s["id"]][1] != hashes[s["id"]]]
 
     if to_embed:
-        log.info(f"Embedding {len(to_embed):,} new stories × {N_CHUNKS} chunks...")
+        log.info(f"Embedding {len(to_embed):,} new/changed stories × {N_CHUNKS} chunks...")
         all_chunks = []
         for s in to_embed:
-            all_chunks.extend(story_chunks(s))
+            all_chunks.extend(chunks[s["id"]])
         t0  = time.time()
         raw = model.encode(
             all_chunks,
@@ -423,20 +464,24 @@ def build_embeddings(stories: list[dict]) -> np.ndarray:
         reshaped = raw.reshape(len(to_embed), N_CHUNKS, dim)
         new_vecs = np.max(reshaped, axis=1)
         log.info(f"  Embedded in {(time.time()-t0)/60:.1f} min")
+        for s, v in zip(to_embed, new_vecs):
+            cached[s["id"]] = (v, hashes[s["id"]])
 
-        if cached_vecs is not None:
-            all_ids  = cached_ids + [s["id"] for s in to_embed]
-            all_vecs = np.vstack([cached_vecs, new_vecs])
-        else:
-            all_ids  = [s["id"] for s in to_embed]
-            all_vecs = new_vecs
-
-        tmp_base = Path(EMBED_CACHE).parent / "_setfit_embed_tmp"
-        np.savez_compressed(str(tmp_base), ids=all_ids, vecs=all_vecs)
+    # Keep only current stories; save if anything changed or the file needs stamping
+    keep_ids = [s["id"] for s in valid if s["id"] in cached]
+    cached_ids  = keep_ids
+    cached_vecs = np.vstack([cached[sid][0] for sid in keep_ids]) if keep_ids else np.zeros((0, 1), np.float32)
+    needs_save = bool(to_embed) or not Path(EMBED_CACHE).exists() or rebuild
+    if not needs_save:
+        npz_files = np.load(EMBED_CACHE, allow_pickle=True).files
+        needs_save = "encoder_fp" not in npz_files or "content_hashes" not in npz_files
+    if needs_save and keep_ids:
+        tmp_base = Path(EMBED_CACHE).parent / f"_setfit_embed_tmp_{os.getpid()}"
+        np.savez_compressed(str(tmp_base), ids=np.array(keep_ids), vecs=cached_vecs,
+                            content_hashes=np.array([cached[sid][1] for sid in keep_ids]),
+                            encoder_fp=np.array(fingerprint))
         Path(str(tmp_base) + ".npz").replace(EMBED_CACHE)
-        log.info(f"  Cache saved: {len(all_ids):,} embeddings")
-        cached_ids  = all_ids
-        cached_vecs = all_vecs
+        log.info(f"  Cache saved: {len(keep_ids):,} embeddings")
 
     # Return in valid order
     id_to_idx = {sid: i for i, sid in enumerate(cached_ids)}
@@ -716,6 +761,8 @@ def main():
     parser.add_argument("--eval",      action="store_true", help="Evaluate classifiers on held-out set")
     parser.add_argument("--tag",       action="store_true", help="Apply tags to all stories (additive — won't remove existing SetFit tags)")
     parser.add_argument("--retag",     action="store_true", help="Clear existing SetFit tags then re-apply (use after threshold changes)")
+    parser.add_argument("--rebuild-embeddings", action="store_true",
+                        help="Ignore output/setfit_embeddings.npz and re-embed every story")
     parser.add_argument("--threshold", type=float, default=0.0,
                         help="Override per-tag threshold (0 = use calibrated)")
     parser.add_argument("--skip-finetune", action="store_true",
@@ -755,7 +802,7 @@ def main():
             log.info("Skipping fine-tuning (--skip-finetune)")
 
         # Phase 2: build embeddings
-        vecs, valid = build_embeddings(stories)
+        vecs, valid = build_embeddings(stories, rebuild=args.rebuild_embeddings)
 
         # Phase 3: train classifiers (use valid only — vecs rows match valid, not stories)
         classifiers = train_classifiers(valid, vecs, active_tags,
@@ -774,7 +821,7 @@ def main():
             sys.exit(1)
         with open(CLF_PATH, "rb") as f:
             classifiers = pickle.load(f)
-        vecs, valid = build_embeddings(stories)
+        vecs, valid = build_embeddings(stories, rebuild=args.rebuild_embeddings)
 
     if args.eval:
         eval_classifiers(valid, vecs, classifiers, threshold=args.threshold,
@@ -806,7 +853,7 @@ def main():
         tmp.replace(INDEX_PATH)
         log.info("SetFit tags cleared. Re-loading and applying...")
         stories = load_index()
-        vecs, valid = build_embeddings(stories)
+        vecs, valid = build_embeddings(stories, rebuild=args.rebuild_embeddings)
         tag_all(stories, vecs, classifiers, valid, threshold=args.threshold)
 
     if args.tag:

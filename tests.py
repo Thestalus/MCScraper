@@ -1026,6 +1026,9 @@ class TestBrowserPages:
         idx.write_text(json.dumps(make_index(stories)))
         process_index(idx)
         build(str(idx), str(out / "stories_meta.db"), force=True)
+        from build_search_db import build as build_search
+        build_search(str(idx), str(out / "search.db"),
+                     str(out / "full_text_cache.db"), force=True, no_fulltext=True)
 
         ids = [s["id"] for s in stories[:20]]
         (out / "preferences.json").write_text(json.dumps({
@@ -1069,8 +1072,148 @@ class TestBrowserPages:
             resp = c.get(path)
             assert resp.status_code == 200, f"{path} -> {resp.status_code}"
 
+    def test_fresh_metadata_shows_no_stale_banner(self, client):
+        c, _ = client
+        assert b"Story metadata is out of date" not in c.get("/").data
+
+    def test_stale_metadata_db_is_flagged(self, corpus, tmp_path, monkeypatch):
+        """stories_meta.db older than the index must not be used silently."""
+        import os, shutil, time
+        from app_factory import AppState, create_app
+        from services.data_store import load_data
+        root, _ = corpus
+        shutil.copytree(root / "output", tmp_path / "output")
+        idx = tmp_path / "output" / "stories_index.json"
+        later = time.time() + 60
+        os.utime(idx, (later, later))  # index edited after the DB was built
+        monkeypatch.chdir(tmp_path)
+        state = AppState(index_path="./output/stories_index.json")
+        load_data(state)
+        assert state.data["_meta_stale"] is True
+        page = create_app(state).test_client().get("/")
+        assert b"Story metadata is out of date" in page.data
+
     def test_random_redirects_to_a_story(self, client):
         c, _ = client
         resp = c.get("/random")
         assert resp.status_code in (301, 302)
         assert "/story/" in resp.headers["Location"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CACHE INVALIDATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _FakeEncoder:
+    """Stands in for a sentence-transformers model; records what it encodes."""
+    def __init__(self):
+        self.encoded = []
+
+    def encode(self, texts, **kw):
+        import numpy as np
+        self.encoded.extend(texts)
+        return np.array([[float(len(t)), 1.0] for t in texts], dtype=np.float32)
+
+
+class TestRecommendationEmbeddingCache:
+
+    def _engine(self, monkeypatch):
+        from recommender import EmbeddingEngine
+        eng = EmbeddingEngine()
+        fake = _FakeEncoder()
+        def load(self=eng):
+            eng._model, eng.semantic = fake, True
+        monkeypatch.setattr(eng, "_try_load_model", load)
+        return eng, fake
+
+    def _stories(self):
+        return [{"id": f"S{i}", "title": f"Story {i}", "description": "d",
+                 "categories": ["mc"], "full_text": "x",
+                 "auto_tags": {"themes": ["romance"]}} for i in range(3)]
+
+    def test_changed_story_is_reencoded_and_others_reused(self, tmp_path, monkeypatch):
+        cache = tmp_path / "recs_embeddings.npz"
+        stories = self._stories()
+        eng, fake = self._engine(monkeypatch)
+        eng.build_index(stories, cache_path=cache)
+        assert len(fake.encoded) == 3
+
+        stories[1]["auto_tags"]["themes"] = ["trigger phrase"]   # retagged
+        eng2, fake2 = self._engine(monkeypatch)
+        eng2.build_index(stories, cache_path=cache)
+        assert len(fake2.encoded) == 1 and "trigger phrase" in fake2.encoded[0]
+
+    def test_removed_story_is_dropped_from_cache(self, tmp_path, monkeypatch):
+        import numpy as np
+        cache = tmp_path / "recs_embeddings.npz"
+        stories = self._stories()
+        self._engine(monkeypatch)[0].build_index(stories, cache_path=cache)
+        self._engine(monkeypatch)[0].build_index(stories[:2], cache_path=cache)
+        assert sorted(np.load(cache)["ids"].tolist()) == ["S0", "S1"]
+
+    def test_arc_tags_reach_the_signature(self):
+        from recommender import EmbeddingEngine
+        s = {"id": "A", "title": "t", "auto_tags": {"narrative_arc": {"ending_state": "fully converted"}}}
+        assert "fully converted" in EmbeddingEngine().story_signature(s)
+
+
+class TestSetFitEmbeddingCache:
+
+    @pytest.fixture
+    def env(self, tmp_path, monkeypatch):
+        import numpy as np
+        import sentence_transformers
+        import setfit_trainer as st
+        model_dir = tmp_path / "setfit_model"
+        model_dir.mkdir()
+        (model_dir / "model.safetensors").write_bytes(b"v1")
+        monkeypatch.setattr(st, "SETFIT_MODEL_DIR", str(model_dir))
+        monkeypatch.setattr(st, "EMBED_CACHE", str(tmp_path / "setfit_embeddings.npz"))
+        calls = []
+
+        class FakeST:
+            def __init__(self, path): pass
+            def encode(self, texts, **kw):
+                calls.append(len(texts))
+                return np.array([[float(len(t) % 97), 1.0] for t in texts], dtype=np.float32)
+
+        monkeypatch.setattr(sentence_transformers, "SentenceTransformer", FakeST)
+        stories = [{"id": f"S{i}", "title": f"T{i}", "full_text": ("word " * 400) + str(i)}
+                   for i in range(4)]
+        return st, stories, calls, model_dir
+
+    def _embedded(self, st, calls):
+        return sum(calls) // st.N_CHUNKS
+
+    def test_unchanged_reuses_cache(self, env):
+        st, stories, calls, _ = env
+        st.build_embeddings(stories)
+        calls.clear()
+        st.build_embeddings(stories)
+        assert self._embedded(st, calls) == 0
+
+    def test_changed_text_reembeds_only_that_story(self, env):
+        st, stories, calls, _ = env
+        st.build_embeddings(stories)
+        calls.clear()
+        stories[2]["full_text"] = "different " * 400
+        st.build_embeddings(stories)
+        assert self._embedded(st, calls) == 1
+
+    def test_retrained_encoder_reembeds_everything(self, env):
+        st, stories, calls, model_dir = env
+        st.build_embeddings(stories)
+        calls.clear()
+        (model_dir / "model.safetensors").write_bytes(b"retrained weights")
+        st.build_embeddings(stories)
+        assert self._embedded(st, calls) == 4
+
+    def test_old_cache_without_fingerprint_is_adopted_and_stamped(self, env):
+        import numpy as np
+        st, stories, calls, _ = env
+        np.savez_compressed(st.EMBED_CACHE.replace(".npz", ""),
+                            ids=np.array([s["id"] for s in stories]),
+                            vecs=np.ones((4, 2), dtype=np.float32))
+        st.build_embeddings(stories)
+        assert self._embedded(st, calls) == 0
+        assert "encoder_fp" in np.load(st.EMBED_CACHE, allow_pickle=True).files

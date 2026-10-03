@@ -127,10 +127,9 @@ def build(index_path: str, db_path: str, force: bool = False) -> None:
     conn.commit()
     conn.close()
 
-    # Atomic replace
-    if db_p.exists():
-        db_p.unlink()
-    os.rename(tmp_path, str(db_p))
+    # Atomic replace — os.replace overwrites in one step on macOS and Windows,
+    # so there is never a moment with no database
+    os.replace(tmp_path, str(db_p))
 
     print(f"  Written {len(rows):,} rows in {time.time()-t1:.1f}s → {db_path}")
     print("Done.")

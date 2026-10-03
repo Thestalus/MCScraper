@@ -404,8 +404,14 @@ precalc-recs: install-semantic
 $(PY):
 	@$(MAKE) --no-print-directory install
 
+# The browser's fast-load metadata DB, rebuilt only when the index is newer
+# than it (e.g. after tagging, an update, or arc tagging on another machine).
+$(OUTPUT_DIR)/stories_meta.db: $(INDEX) | $(PY)
+	@echo "$(BOLD)stories_meta.db is older than the index — rebuilding...$(RESET)"
+	cd $(PROJECT_DIR) && $(PY) build_stories_db.py --index $(INDEX) --force
+
 .PHONY: browse
-browse: | $(PY)
+browse: $(if $(wildcard $(INDEX)),$(OUTPUT_DIR)/stories_meta.db) | $(PY)
 	@$(PY) -c "import flask" 2>/dev/null || $(PIP) install flask --quiet
 	@echo "$(BOLD)Starting MC Archive browser...$(RESET)"
 	@echo "  Open: http://localhost:5003"
