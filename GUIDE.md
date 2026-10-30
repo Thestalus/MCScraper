@@ -647,9 +647,9 @@ make post-update       # Re-tag + rebuild JSONL + rebuild recs + FTS DB + storie
 make build-stories-db  # Build/update stories_meta.db from stories_index.json
 
 # FTS search database
-make build-search-db        # Build/update FTS index (slim, ~150 MB, skips if up to date)
-make build-search-db-force  # Force rebuild slim FTS index
-make build-search-db-full   # Build with full story text (~1.6 GB, enables body-text search)
+make build-search-db        # Update FTS index incl. story text (~600 MB; re-indexes only changed stories)
+make build-search-db-force  # Rebuild FTS index from scratch
+make build-search-db-slim   # Metadata-only index (no body-text search)
 
 # Retagging
 make tag               # Re-tag all stories, parallel (~8 min) — recommended
@@ -731,7 +731,7 @@ Ideas that would be straightforward to implement, roughly in priority order:
 | Idea | Effort | Notes |
 |------|--------|-------|
 | **Saved searches / presets** | Medium | Save a filter combination (e.g. "long hypnosis with corruption arc") and recall it in one click. Stored in `preferences.json`. |
-| **Full-body text search** | Low | Run `make build-search-db-full` to enable searching inside story text (1.6 GB index, ~4 sec cold start on Dropbox — acceptable after warmup). |
+| **Full-body text search** | Done | `make build-search-db` indexes story text by default (~600 MB contentless FTS5 index, read from disk on demand; updates re-index only changed stories). |
 
 ### Recommendations
 

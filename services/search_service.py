@@ -190,7 +190,8 @@ def _fts_candidate_ids(state, q: str, search_mode: str) -> frozenset:
         fts_q = " OR ".join(f'"{w}"' for w in q.split())
     try:
         rows = state.search_conn.execute(
-            "SELECT story_id FROM stories_fts WHERE stories_fts MATCH ?",
+            "SELECT d.story_id FROM stories_fts JOIN fts_docs d ON d.rowid = stories_fts.rowid"
+            " WHERE stories_fts MATCH ?",
             (fts_q,)
         ).fetchall()
         return frozenset(row[0] for row in rows)

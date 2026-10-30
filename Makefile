@@ -61,8 +61,8 @@ help:
 	@echo "  make update           Check for new stories (last week)"
 	@echo "  make update-full      Check for new stories + run full post-update pipeline"
 	@echo "  make post-update      Re-tag + rebuild JSONL + rebuild recs + FTS DB (after any index change)"
-	@echo "  make build-search-db  Build FTS search database only (skips if up to date)"
-	@echo "  make build-search-db-force  Force-rebuild FTS search database"
+	@echo "  make build-search-db  Update FTS search database (incremental; skips if up to date)"
+	@echo "  make build-search-db-force  Rebuild FTS search database from scratch"
 	@echo ""
 	@echo "$(CYAN)Search$(RESET)"
 	@echo "  make search           Open interactive search REPL"
@@ -100,7 +100,7 @@ install:
 		python3 -m venv $(VENV); \
 	fi
 	@$(PIP) install --upgrade pip --quiet
-	@$(PIP) install requests beautifulsoup4 lxml pytest --quiet
+	@$(PIP) install requests beautifulsoup4 lxml pytest ijson --quiet
 	@echo "$(GREEN)✓ Environment ready$(RESET)"
 	@echo "  Python: $$($(PY) --version)"
 	@echo "  Venv:   $(VENV)"
@@ -305,10 +305,11 @@ rebuild-jsonl:
 # SEARCH
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# build-search-db uses --no-fulltext by default: ~30 MB, instant cold start,
-# searches title/author/description/categories/tags.
-# For full in-body text search (1.6 GB, 4-5s cold start on network drives):
-#   make build-search-db-full
+# build-search-db indexes story text as well as title/author/description/tags.
+# Updates are incremental: only new, changed and removed stories are re-indexed.
+# The index is contentless (words only, no second copy of the text) and is read
+# from disk on demand, not loaded into memory.
+# For a metadata-only index (no body-text search): make build-search-db-slim
 .PHONY: build-stories-db
 build-stories-db: install
 	@echo "$(BOLD)Building stories_meta.db from stories_index.json...$(RESET)"
@@ -319,22 +320,24 @@ build-stories-db: install
 build-search-db: install
 	@if [ ! -f "$(INDEX)" ]; then \
 		echo "No index yet — run make scrape first."; exit 1; fi
-	@echo "$(BOLD)Building FTS search database (slim)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --no-fulltext
+	@echo "$(BOLD)Updating FTS search database (full text)...$(RESET)"
+	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX)
 	@echo "$(GREEN)✓ search.db ready$(RESET)"
 
 .PHONY: build-search-db-force
 build-search-db-force: install
-	@echo "$(BOLD)Rebuilding FTS search database (slim, forced)...$(RESET)"
-	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --force --no-fulltext
+	@echo "$(BOLD)Rebuilding FTS search database from scratch (full text)...$(RESET)"
+	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --force
 	@echo "$(GREEN)✓ search.db ready$(RESET)"
 
 .PHONY: build-search-db-full
-build-search-db-full: install
-	@echo "$(BOLD)Building FTS search database with full-text (1.6 GB, slow cold start)...$(RESET)"
-	@echo "  Enables searching inside story body text."
-	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --force
-	@echo "$(GREEN)✓ search.db ready (full-text)$(RESET)"
+build-search-db-full: build-search-db
+
+.PHONY: build-search-db-slim
+build-search-db-slim: install
+	@echo "$(BOLD)Building FTS search database (metadata only, no story text)...$(RESET)"
+	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --no-fulltext
+	@echo "$(GREEN)✓ search.db ready (slim)$(RESET)"
 
 .PHONY: post-update
 # Pass SKIP_RETAG=1 to skip the full regex retag (use after make update, which already
@@ -367,9 +370,8 @@ post-update: install-semantic
 	@echo "$(CYAN)Step 5/7 — Rebuilding recommendation cache...$(RESET)"
 	cd $(PROJECT_DIR) && $(PY) recommender.py --precalc --n-recs 200
 	@echo ""
-	@echo "$(CYAN)Step 6/7 — Rebuilding FTS search database (slim)...$(RESET)"
-	rm -f $(PROJECT_DIR)/output/search.db $(PROJECT_DIR)/output/search.db-shm $(PROJECT_DIR)/output/search.db-wal
-	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX) --force --no-fulltext
+	@echo "$(CYAN)Step 6/7 — Updating FTS search database (changed stories only)...$(RESET)"
+	cd $(PROJECT_DIR) && $(PY) build_search_db.py --index $(INDEX)
 	@echo ""
 	@echo "$(CYAN)Step 6.5/7 — Rebuilding stories_meta.db (browser fast-load index)...$(RESET)"
 	cd $(PROJECT_DIR) && $(PY) build_stories_db.py --index $(INDEX) --force

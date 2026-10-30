@@ -9,6 +9,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from build_search_db import SCHEMA_VERSION as SEARCH_DB_SCHEMA
 from recommender import EmbeddingEngine, PreferenceStore, RecommendationEngine
 from tag_utils import get_auto_tags  # noqa: F401 — re-exported for routes/services
 
@@ -82,14 +83,24 @@ def _open_search_db(state) -> None:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA query_only=1")
+        if conn.execute("PRAGMA user_version").fetchone()[0] < SEARCH_DB_SCHEMA:
+            conn.close()
+            print("search.db is an old format — run: make build-search-db")
+            print("  (falling back to in-memory search until rebuilt)")
+            return
         count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
+        row = conn.execute("SELECT value FROM meta WHERE key='fulltext'").fetchone()
         state.search_conn = conn
-        print(f"FTS search DB ready ({count:,} stories) — full-text search enabled")
+        if row and row[0] == "1":
+            print(f"FTS search DB ready ({count:,} stories) — searches story text")
+        else:
+            print(f"FTS search DB ready ({count:,} stories) — metadata only, story text "
+                  "not indexed (run: make build-search-db)")
         # Warm up the FTS index in the background so the first user search is fast.
         def _warmup():
             try:
                 conn.execute(
-                    "SELECT story_id FROM stories_fts WHERE stories_fts MATCH '\"the\"' LIMIT 1"
+                    "SELECT rowid FROM stories_fts WHERE stories_fts MATCH '\"the\"' LIMIT 1"
                 ).fetchall()
                 print("FTS index warm")
             except Exception:

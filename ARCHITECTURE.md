@@ -97,7 +97,7 @@ After anything changes `stories_index.json`, run `make post-update`. It re-tags 
 | File | Run with | What it does |
 |------|----------|--------------|
 | `build_stories_db.py` | `make build-stories-db` (auto in `make browse`) | Builds `stories_meta.db`: every story without its text, so the browser loads in under a second. |
-| `build_search_db.py` | `make build-search-db` | Builds `search.db` (SQLite FTS5) for fast search; `-full` variant indexes story text too. |
+| `build_search_db.py` | `make build-search-db` | Builds or incrementally updates `search.db` (contentless SQLite FTS5 over metadata, tags and story text); `-slim` variant skips story text. |
 | `recommender.py` | `make precalc-recs` | Embedding engine, preference store and recommendation engine; `--precalc` writes `recs_cache.json`. |
 
 ### The browser

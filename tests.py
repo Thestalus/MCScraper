@@ -12,10 +12,14 @@ Run via Makefile:
 """
 
 import json
+import os
 import re
+import sqlite3
 import sys
 import tempfile
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -951,6 +955,84 @@ class TestSearch:
         from search_stories import search
         results = search(stories)
         assert len(results) == 3
+
+
+class TestSearchDb:
+    """build_search_db: story text is searchable, and updates re-index only what changed."""
+
+    @staticmethod
+    def _write(idx, stories):
+        idx.write_text(json.dumps(make_index(stories)))
+        # Make the index newer than search.db so the up-to-date guard doesn't skip.
+        future = time.time() + 10
+        os.utime(idx, (future, future))
+
+    @staticmethod
+    def _match(db, word):
+        from services.search_service import _fts_candidate_ids
+        conn = sqlite3.connect(db)
+        try:
+            return _fts_candidate_ids(SimpleNamespace(search_conn=conn), word, "literal")
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _rowids(db):
+        conn = sqlite3.connect(db)
+        try:
+            return dict(conn.execute("SELECT story_id, rowid FROM fts_docs"))
+        finally:
+            conn.close()
+
+    @pytest.fixture
+    def built(self, tmp_path):
+        from build_search_db import build
+        idx, db = tmp_path / "stories_index.json", tmp_path / "search.db"
+        stories = [dict(SAMPLE_STORY_HYPNOSIS), dict(SAMPLE_STORY_OFFICE),
+                   dict(SAMPLE_STORY_FANTASY)]
+        idx.write_text(json.dumps(make_index(stories)))
+        build(str(idx), str(db), str(tmp_path / "no_cache.db"))
+        return build, idx, db, stories
+
+    def test_story_text_is_searchable(self, built):
+        _, _, db, _ = built
+        assert self._match(db, "boardroom") == {SAMPLE_STORY_OFFICE["id"]}
+
+    def test_slim_build_skips_story_text(self, built, tmp_path):
+        build, idx, _, _ = built
+        slim = tmp_path / "slim.db"
+        build(str(idx), str(slim), str(tmp_path / "no_cache.db"), no_fulltext=True)
+        assert self._match(slim, "boardroom") == frozenset()
+
+    def test_update_reindexes_only_changed_stories(self, built, capsys):
+        build, idx, db, stories = built
+        before = self._rowids(db)
+        hyp, office, fantasy = stories
+        office["full_text"] = office["full_text"].replace("boardroom", "penthouse")
+        new = {**SAMPLE_STORY_HYPNOSIS, "id": "NewStory", "title": "New Story",
+               "full_text": "A lighthouse keeper and a pocket watch."}
+        self._write(idx, [hyp, office, new])          # fantasy removed
+        capsys.readouterr()
+        build(str(idx), str(db), str(idx.parent / "no_cache.db"))
+
+        assert "1 added  ·  1 re-indexed  ·  1 removed" in capsys.readouterr().out
+        assert self._match(db, "boardroom") == frozenset()
+        assert self._match(db, "penthouse") == {office["id"]}
+        assert self._match(db, "lighthouse") == {"NewStory"}
+        after = self._rowids(db)
+        assert fantasy["id"] not in after
+        assert after[hyp["id"]] == before[hyp["id"]]
+        assert after[office["id"]] == before[office["id"]]
+
+    def test_old_schema_is_rebuilt(self, tmp_path):
+        from build_search_db import build
+        idx, db = tmp_path / "stories_index.json", tmp_path / "search.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE VIRTUAL TABLE stories_fts USING fts5(story_id UNINDEXED, title)")
+        conn.close()
+        self._write(idx, [dict(SAMPLE_STORY_OFFICE)])
+        build(str(idx), str(db), str(tmp_path / "no_cache.db"))
+        assert self._match(db, "boardroom") == {SAMPLE_STORY_OFFICE["id"]}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
