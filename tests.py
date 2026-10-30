@@ -1384,6 +1384,22 @@ class TestRetagSingleValueDims:
         assert at["Sv"]["length_class"] == "flash"
 
 
+class TestWaybackChapters:
+
+    def test_each_chapter_fetched_by_its_own_number(self, monkeypatch):
+        import wayback_scraper as ws
+        urls = [f"https://mcstories.com/S/S{n if n > 1 else ''}.html" for n in (1, 2, 3)]
+        monkeypatch.setattr(ws, "DELAY", 0)
+        monkeypatch.setattr(ws, "scrape_wayback_landing",
+                            lambda wb, slug: {"chapter_urls": list(urls)})
+        # Like the real one, the first URL tried is built from chapter_num
+        monkeypatch.setattr(ws, "scrape_wayback_chapter",
+                            lambda ts, url, chapter_num=1: f"text of chapter {chapter_num}")
+        story = ws.scrape_wayback_story("S", "20200101000000")
+        assert story["full_text"].split("\n\n* * *\n\n") == [
+            "text of chapter 1", "text of chapter 2", "text of chapter 3"]
+
+
 class TestWaybackMerge:
 
     def _story(self, sid, words, source="wayback", **kw):

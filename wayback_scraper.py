@@ -553,7 +553,7 @@ def scrape_wayback_story(slug: str, timestamp: str) -> dict:
         time.sleep(DELAY)
         if chapter_count > 1:
             log.info(f"    ch {i}/{chapter_count}: {ch_url.split('/')[-1]}")
-        text = scrape_wayback_chapter(timestamp, ch_url)
+        text = scrape_wayback_chapter(timestamp, ch_url, i)
         if text:
             texts.append(text)
         else:
@@ -561,7 +561,7 @@ def scrape_wayback_story(slug: str, timestamp: str) -> dict:
             fallback = ch_url.replace(".html", "1.html") if i == 1 else None
             if fallback:
                 time.sleep(DELAY)
-                text = scrape_wayback_chapter(timestamp, fallback)
+                text = scrape_wayback_chapter(timestamp, fallback, 1)
                 if text:
                     texts.append(text)
                     meta["chapter_urls"][0] = fallback
