@@ -4,6 +4,7 @@ import json, sys, time, tempfile, os
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
 import index_store
+from svengali import SV_POV
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -37,7 +38,8 @@ def main():
     """Re-run the regex tagger on every story with text across all CPU cores and save
     through index_store. Regex-only dimensions are replaced outright; in the other
     dimensions, tags from Svengali and SetFit are kept and only the 'regex' sources are
-    rebuilt.
+    rebuilt. length_class is recomputed; pov too, unless the story has a Svengali POV
+    tag, whose value (set by the Svengali import) is kept.
     """
     print("Loading index...")
     data = index_store.load_index(INDEX_PATH, for_write=True)
@@ -88,7 +90,15 @@ def main():
             sources = {tag: src for tag, src in sources.items() if src}
 
             for dim, tag_list in tags.items():
-                if dim.startswith("_") or not isinstance(tag_list, list):
+                if dim.startswith("_"):
+                    continue
+                if not isinstance(tag_list, list):
+                    # Single-value dims (pov, length_class). Svengali's POV is a
+                    # reader's judgement of the whole story; regex only samples the
+                    # opening, so it never overrides it.
+                    if dim == "pov" and any(t in SV_POV for t in s["auto_tags"].get("_svengali_tags") or []):
+                        continue
+                    s["auto_tags"][dim] = tag_list
                     continue
                 if dim in REGEX_ONLY_DIMS:
                     s["auto_tags"][dim] = tag_list

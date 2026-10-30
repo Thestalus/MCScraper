@@ -1360,6 +1360,30 @@ class TestIndexStore:
         assert json.loads(Path(str(idx) + ".lock").read_text())["pid"] != dead.pid
 
 
+class TestRetagSingleValueDims:
+
+    def test_length_and_pov_refreshed_but_svengali_pov_kept(self, tmp_path, monkeypatch):
+        import index_store, retag_parallel
+        text = "I walked home and I saw my friend. " * 30
+        stale = {"pov": "third person", "length_class": "novel"}
+        idx = tmp_path / "stories_index.json"
+        idx.write_text(json.dumps(make_index([
+            {"id": "Plain", "full_text": text, "word_count": 240, "auto_tags": dict(stale)},
+            {"id": "Sv", "full_text": text, "word_count": 240,
+             "auto_tags": {**stale, "_svengali_tags": ["Third-person"]}},
+        ])))
+        monkeypatch.setattr(retag_parallel, "INDEX_PATH", str(idx))
+        try:
+            retag_parallel.main()
+        finally:
+            index_store.release_write_lock(idx)
+        at = {s["id"]: s["auto_tags"] for s in json.loads(idx.read_text())["stories"]}
+        assert at["Plain"]["pov"] == "first person"
+        assert at["Plain"]["length_class"] == "flash"
+        assert at["Sv"]["pov"] == "third person"        # Svengali's value wins
+        assert at["Sv"]["length_class"] == "flash"
+
+
 class TestWaybackMerge:
 
     def _story(self, sid, words, source="wayback", **kw):
