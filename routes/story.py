@@ -19,7 +19,8 @@ def story(story_id):
     """Story reader. Splits the text into chapters (HTML stories on <!-- BREAK --> markers;
     plain-text stories on '* * *' lines, repairing soft line-wrap breaks and OCR double
     spaces), then renders the chapter given by ?ch= along with the user's like/want
-    status and up to 4 similar stories.
+    status and up to 4 similar stories. Scene breaks inside a chapter must therefore
+    use another marker, such as '~ ~ ~'.
     """
     state = current_app.state
     s = state.data.get("by_id", {}).get(story_id)
@@ -37,10 +38,11 @@ def story(story_id):
             paras = [p.strip() for p in ch.split("\n\n") if p.strip()]
             # Merge false paragraph breaks: a chunk that ends without sentence-ending
             # punctuation and whose successor starts lowercase is a soft word-wrap
-            # break, not a real paragraph boundary.
+            # break, not a real paragraph boundary. An opening quote does not count as
+            # lowercase: after a heading, "…" or "—" it starts new dialogue.
             merged: list[str] = []
             for p in paras:
-                if merged and not re.search(r'[.!?"”]\s*$', merged[-1]) and re.match(r'[a-z‘“]', p):
+                if merged and not re.search(r'[.!?"”]\s*$', merged[-1]) and re.match(r'[a-z]', p):
                     merged[-1] = merged[-1] + " " + p
                 else:
                     merged.append(p)
