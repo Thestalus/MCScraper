@@ -1360,6 +1360,43 @@ class TestIndexStore:
         assert json.loads(Path(str(idx) + ".lock").read_text())["pid"] != dead.pid
 
 
+class TestWaybackMerge:
+
+    def _story(self, sid, words, source="wayback", **kw):
+        return {"id": sid, "title": sid, "source": source, "full_text": "word " * words,
+                "word_count": words, "chapter_count": 1, "fetch_error": None, **kw}
+
+    def test_merge_adds_new_and_refreshes_shorter_wayback_copies(self, tmp_path, monkeypatch):
+        import index_store, wayback_scraper as ws
+        main, wb = tmp_path / "stories_index.json", tmp_path / "wayback_index.json"
+        monkeypatch.setattr(ws, "MAIN_INDEX", main)
+        monkeypatch.setattr(ws, "WAYBACK_INDEX", wb)
+        main.write_text(json.dumps(make_index([
+            self._story("Short", 100, auto_tags={"pov": "third person"}),
+            self._story("Live", 100, source="mcstories"),
+            self._story("Cleaned", 100),
+        ])))
+        # Index holds the complete copy; the sidecar a partial one
+        wb.write_text(json.dumps({"stories": [
+            self._story("Short", 900, chapter_count=3),
+            self._story("Live", 900),
+            self._story("New", 50),
+            self._story("Cleaned", 105),     # raw text a few words longer than cleaned
+        ]}))
+        wb.with_suffix(".jsonl").write_text(json.dumps(self._story("Short", 400)) + "\n")
+        try:
+            ws.merge_into_main()
+        finally:
+            index_store.release_write_lock(main)
+        stories = {s["id"]: s for s in json.loads(main.read_text())["stories"]}
+        assert stories["Short"]["word_count"] == 900
+        assert stories["Short"]["chapter_count"] == 3
+        assert stories["Short"]["auto_tags"] == {"pov": "third person"}   # tags kept
+        assert stories["Live"]["word_count"] == 100                     # live story untouched
+        assert stories["Cleaned"]["word_count"] == 100                  # small gain ignored
+        assert "New" in stories
+
+
 class TestPreferenceConcurrency:
 
     def test_parallel_mutations_all_survive_as_valid_json(self, tmp_path):

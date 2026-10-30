@@ -679,8 +679,9 @@ def consolidate_wayback_index():
 
 def merge_into_main(dry_run: bool = False):
     """
-    Merge wayback stories into stories_index.json.
-    Loads the full main index — safe and simple. The main index is
+    Merge wayback stories into stories_index.json: add stories missing from it,
+    and refresh the text of wayback stories it already holds when a longer copy
+    has since been recovered. Loads the full main index — safe and simple. The main index is
     ~500MB but this is a one-time operation done occasionally.
     """
     # Find wayback stories
@@ -692,20 +693,31 @@ def merge_into_main(dry_run: bool = False):
         print("No main stories_index.json found.")
         return
 
-    # Load wayback stories from .jsonl sidecar or index
-    wb_stories: list[dict] = []
+    # Load wayback stories from both the index and the .jsonl sidecar. Either can
+    # hold the most complete copy of a story (--retry-failed recovers into the
+    # index; date scans append to the sidecar), so keep the one with the most text.
+    candidates: list[dict] = []
+    if WAYBACK_INDEX.exists():
+        with open(WAYBACK_INDEX, encoding="utf-8") as f:
+            candidates.extend(json.load(f).get("stories", []))
     if stories_file.exists():
         with open(stories_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     try:
-                        wb_stories.append(json.loads(line))
+                        candidates.append(json.loads(line))
                     except:
                         pass
-    else:
-        with open(WAYBACK_INDEX, encoding="utf-8") as f:
-            wb_stories = json.load(f).get("stories", [])
+
+    best: dict[str, dict] = {}
+    for s in candidates:
+        if not s.get("id") or s.get("fetch_error") or not s.get("full_text"):
+            continue
+        cur = best.get(s["id"])
+        if cur is None or (s.get("word_count") or 0) > (cur.get("word_count") or 0):
+            best[s["id"]] = s
+    wb_stories = list(best.values())
 
     if not wb_stories:
         print("No wayback stories found in index or sidecar.")
@@ -715,17 +727,28 @@ def merge_into_main(dry_run: bool = False):
     print(f"Loading main index...")
     main_data = index_store.load_index(MAIN_INDEX, for_write=not dry_run)
 
-    existing_ids = {s["id"] for s in main_data.get("stories", [])}
-    print(f"Main index: {len(existing_ids):,} stories")
+    existing = {s["id"]: s for s in main_data.get("stories", [])}
+    print(f"Main index: {len(existing):,} stories")
 
-    to_add = [s for s in wb_stories
-              if s.get("id") not in existing_ids
-              and not s.get("fetch_error")
-              and s.get("full_text")]
+    to_add = [s for s in wb_stories if s["id"] not in existing]
+    # Wayback stories already merged from an earlier, shorter snapshot (e.g. only
+    # chapter 1 had been posted when it was captured). Live-site stories are never
+    # touched. Small word-count gains are ignored: they come from the main index's
+    # text having been cleaned since, and the raw copy must not replace it.
+    def _is_longer(new: dict, old: dict) -> bool:
+        if (new.get("chapter_count") or 1) > (old.get("chapter_count") or 1):
+            return True
+        return (new.get("word_count") or 0) > 1.2 * (old.get("word_count") or 0)
+
+    to_update = [s for s in wb_stories
+                 if s["id"] in existing
+                 and existing[s["id"]].get("source") == "wayback"
+                 and _is_longer(s, existing[s["id"]])]
 
     print(f"Wayback stories total:        {len(wb_stories):,}")
     print(f"Already in main index:        {len(wb_stories) - len(to_add):,}")
     print(f"New (deleted from live site): {len(to_add):,}")
+    print(f"Longer copy than main index:  {len(to_update):,}")
 
     if dry_run:
         print("\nDry run — would add:")
@@ -733,11 +756,26 @@ def merge_into_main(dry_run: bool = False):
             print(f"  {s.get('id',''):<40} {s.get('title','')[:50]}")
         if len(to_add) > 20:
             print(f"  ... and {len(to_add)-20} more")
+        if to_update:
+            print("\nDry run — would update text:")
+            for s in to_update[:20]:
+                old = existing[s["id"]]
+                print(f"  {s['id']:<40} {old.get('word_count', 0):>7,} → {s.get('word_count', 0):,} words")
         return
 
-    if not to_add:
+    if not to_add and not to_update:
         print("Nothing new to merge.")
         return
+
+    if to_update:
+        print(f"Updating {len(to_update):,} stories with longer text "
+              f"(tags kept — re-run tagging to refresh them)...")
+        for s in to_update:
+            old = existing[s["id"]]
+            for k in ("author_url", "wayback_url", "snapshot_date", "word_count",
+                      "updated_date", "full_text", "chapter_count", "chapter_urls"):
+                if k in s:
+                    old[k] = s[k]
 
     print(f"Merging {len(to_add):,} stories...")
 
@@ -754,7 +792,8 @@ def merge_into_main(dry_run: bool = False):
     except RuntimeError as e:
         print(f"ERROR: {e}")
         return
-    print(f"✓ Merged {len(to_add):,} wayback stories into {MAIN_INDEX}")
+    print(f"✓ Merged {len(to_add):,} wayback stories into {MAIN_INDEX}"
+          f"{f', updated {len(to_update):,}' if to_update else ''}")
     print(f"  Total stories now: {total_expected:,}")
 
 
