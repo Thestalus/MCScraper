@@ -657,6 +657,9 @@ def run(args):
         chapters_updated = apply_chapter_updates(chapter_updates)
 
     # Step 5: run SetFit tagging as a second pass
+    # Done writing the index: release our lock so the SetFit subprocess can take it.
+    index_store.release_write_lock(INDEX_PATH)
+
     setfit_ok = False
     if (added_to_index > 0 or chapters_updated > 0) and not args.skip_setfit:
         setfit_ok = run_setfit_tagging(OUTPUT_DIR)
